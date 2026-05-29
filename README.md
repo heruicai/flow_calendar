@@ -18,7 +18,7 @@ This repository is developed in staged feature branches so the commit and PR his
 
 ## Current Stage
 
-Stage 2 adds a persistent JSON task storage system. Later branches will add command parsing, calendar visualization, and voice adapters.
+Stage 3 adds a rule-based command parser for voice-like text input. Later branches will add calendar visualization and voice adapters.
 
 ## Project Structure
 
@@ -73,6 +73,34 @@ FlowCal stores tasks in local JSON files:
 - `data/sample_tasks.json`: public sample data with fictional tasks for demos and tests.
 
 The storage layer lives in `src/task_store.py` and supports loading, saving, adding, updating, deleting, querying by date, listing pending tasks, marking tasks completed, and postponing tasks. JSON is saved with `ensure_ascii=False` and indentation so Chinese task titles remain readable.
+
+## Voice And Text Command Parsing
+
+The current version treats typed text as simulated speech-to-text output. The same parser will be reused by future voice input.
+
+The parser in `src/command_parser.py` supports these intents:
+
+- `add_event`: add a task or calendar event.
+- `delete_event`: delete a task by date and keyword.
+- `query_schedule`: view a day's schedule.
+- `mark_completed`: mark a task as completed.
+
+It recognizes four task types:
+
+- `fixed_event`: fixed appointments such as interviews, meetings, exams, classes, and defenses.
+- `deadline_task`: tasks with deadline expressions such as `前`, `之前`, `截止`, `deadline`, or `ddl`.
+- `essential_task`: daily necessary tasks such as laundry, meals, medicine, and package pickup.
+- `flexible_plan`: flexible study or work plans that stay in the todo pool.
+
+Example commands:
+
+- `明天下午三点到四点参加算法面试`
+- `周五前完成报告，预计三小时`
+- `今天必须洗衣服`
+- `添加弹性任务，刷两道 LeetCode`
+- `我明天有什么安排`
+- `删除明天下午的算法面试`
+- `洗衣服完成了`
 
 ## Development Plan
 
