@@ -20,6 +20,12 @@ FlowCal is planned as a small local-first Streamlit application.
 5. Calendar view renders fixed, deadline, essential, and flexible tasks.
 6. Response generator summarizes the result.
 
+## Voice Adapter
+
+`src/voice_adapter.py` sits between the Streamlit UI and the parser for voice-like input. Text input and simulated voice input both pass through voice normalization before entering `src/command_parser.py`, so future ASR integrations can reuse the same command parsing pipeline.
+
+For replies, `src/response_generator.py` produces the system response text. The voice adapter then converts that text into a shorter spoken response and exposes a mock `text_to_speech` interface. This keeps the app runnable without API keys, network services, or unstable local audio dependencies.
+
 ## Storage
 
 Runtime task data will be stored in `data/tasks.json`. This file is ignored by Git to avoid committing private schedules. Public sample data lives in `data/sample_tasks.json`.

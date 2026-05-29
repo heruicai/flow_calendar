@@ -18,7 +18,7 @@ This repository is developed in staged feature branches so the commit and PR his
 
 ## Current Stage
 
-Stage 4 adds the Streamlit calendar interface and visual task panels. Later branches will add voice adapters.
+Stage 5 adds the voice interaction adapter. The app now supports text input, simulated voice input, text response, voice-reply text, and calendar-view feedback.
 
 ## Project Structure
 
@@ -124,6 +124,23 @@ Run the UI with:
 conda activate flow_calendar
 streamlit run app.py
 ```
+
+## Voice Interaction
+
+FlowCal currently supports two input modes:
+
+- `Text input`: type a command directly.
+- `Simulated voice input`: type text that is treated as speech-to-text output.
+
+Both modes are normalized by `src/voice_adapter.py` and then sent to the same `parse_command` logic. This keeps the workflow stable while preserving a clear path for real ASR.
+
+Feedback modes:
+
+- Text response in the `System Response` panel.
+- Voice reply text in the `Spoken Response / Voice Reply` panel.
+- Calendar-view feedback through colored task cards and task panels.
+
+The current TTS path is a mock adapter that returns structured voice-reply metadata without generating audio. Future versions can connect Whisper, browser speech recognition, or local TTS engines. No new voice dependency was added in this stage.
 
 ## Development Plan
 

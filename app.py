@@ -24,6 +24,12 @@ from src.task_store import (
     mark_task_completed,
     mark_task_postponed,
 )
+from src.voice_adapter import (
+    build_spoken_response,
+    get_voice_input_mode_description,
+    normalize_voice_text,
+    text_to_speech,
+)
 
 
 SAMPLE_COMMANDS = [
@@ -70,19 +76,41 @@ def main() -> None:
         _render_task_panels(tasks)
         st.subheader("System Response")
         st.info(st.session_state.system_response)
+        st.subheader("Spoken Response / Voice Reply")
+        st.write(st.session_state.spoken_response)
+        if st.button("Generate voice reply", use_container_width=True):
+            voice_reply = text_to_speech(st.session_state.system_response)
+            st.session_state.spoken_response = voice_reply["spoken_text"]
+            st.session_state.voice_reply_message = voice_reply["message"]
+            st.rerun()
+        st.caption(st.session_state.voice_reply_message)
 
 
 def _init_session_state() -> None:
     today = date.today().isoformat()
+    welcome_message = build_welcome_message()
     st.session_state.setdefault("selected_date", today)
     st.session_state.setdefault("calendar_date_input", date.fromisoformat(today))
-    st.session_state.setdefault("system_response", build_welcome_message())
+    st.session_state.setdefault("system_response", welcome_message)
+    st.session_state.setdefault("spoken_response", build_spoken_response(welcome_message))
+    st.session_state.setdefault("voice_reply_message", "Voice reply has not been generated yet.")
     st.session_state.setdefault("command_text", "")
+    st.session_state.setdefault("input_mode", "Text input")
 
 
 def _render_command_panel() -> None:
     st.subheader("Voice / Text Command")
-    st.caption("Typed text is treated as simulated speech-to-text output. Real ASR can be connected later.")
+    input_mode = st.radio(
+        "Input mode",
+        ["Text input", "Simulated voice input"],
+        key="input_mode",
+        horizontal=True,
+    )
+    if input_mode == "Simulated voice input":
+        st.caption("Current version treats typed text as speech-to-text output.")
+    else:
+        st.caption("Type a calendar command directly.")
+    st.caption(get_voice_input_mode_description())
 
     st.markdown("**Examples**")
     for index, sample in enumerate(SAMPLE_COMMANDS):
@@ -98,17 +126,18 @@ def _render_command_panel() -> None:
     )
 
     if st.button("Parse and Apply", type="primary", use_container_width=True):
-        _handle_command(command)
+        _handle_command(command, input_mode=input_mode)
 
 
-def _handle_command(command: str) -> None:
+def _handle_command(command: str, input_mode: str = "Text input") -> None:
     if not command.strip():
-        st.session_state.system_response = "Please enter a command first."
+        _set_system_response("Please enter a command first.")
         return
 
-    parsed = parse_command(command)
+    normalized_command = normalize_voice_text(command)
+    parsed = parse_command(normalized_command)
     if parsed.get("need_clarification"):
-        st.session_state.system_response = build_parse_response(parsed)
+        _set_system_response(build_parse_response(parsed))
         return
 
     intent = parsed.get("intent")
@@ -116,7 +145,8 @@ def _handle_command(command: str) -> None:
         stored_task = add_task(parsed["task"])
         if stored_task.get("date"):
             _set_selected_date(stored_task["date"])
-        st.session_state.system_response = f"Added: {stored_task['title']}"
+        mode_label = "Voice command" if input_mode == "Simulated voice input" else "Text command"
+        _set_system_response(f"{mode_label} applied. Added: {stored_task['title']}")
         return
 
     if intent == "query_schedule":
@@ -124,14 +154,14 @@ def _handle_command(command: str) -> None:
         if query_date:
             _set_selected_date(query_date)
             tasks = load_tasks()
-            st.session_state.system_response = build_schedule_summary(tasks, query_date)
+            _set_system_response(build_schedule_summary(tasks, query_date))
         return
 
     if intent in {"mark_completed", "delete_event"}:
         _handle_task_action_from_query(parsed)
         return
 
-    st.session_state.system_response = build_parse_response(parsed)
+    _set_system_response(build_parse_response(parsed))
 
 
 def _handle_task_action_from_query(parsed: dict) -> None:
@@ -141,11 +171,11 @@ def _handle_task_action_from_query(parsed: dict) -> None:
     candidates = _find_matching_tasks(load_tasks(), keyword, query_date)
 
     if not candidates:
-        st.session_state.system_response = f"No matching task found for: {keyword}"
+        _set_system_response(f"No matching task found for: {keyword}")
         return
 
     if len(candidates) > 1:
-        st.session_state.system_response = (
+        _set_system_response(
             f"Found {len(candidates)} matching tasks for '{keyword}'. "
             "Please use the task card buttons to choose one."
         )
@@ -154,10 +184,10 @@ def _handle_task_action_from_query(parsed: dict) -> None:
     task = candidates[0]
     if parsed.get("intent") == "mark_completed":
         updated = mark_task_completed(task["id"])
-        st.session_state.system_response = f"Marked completed: {updated['title']}"
+        _set_system_response(f"Marked completed: {updated['title']}")
     else:
         delete_task(task["id"])
-        st.session_state.system_response = f"Deleted: {task['title']}"
+        _set_system_response(f"Deleted: {task['title']}")
 
 
 def _find_matching_tasks(tasks: list[dict], keyword: str, query_date: str | None = None) -> list[dict]:
@@ -213,18 +243,18 @@ def _render_task_actions(task: dict, allow_postpone: bool) -> None:
     columns = st.columns(3 if allow_postpone else 2)
     if columns[0].button("Mark completed", key=f"complete_{task_id}", use_container_width=True):
         updated = mark_task_completed(task_id)
-        st.session_state.system_response = f"Marked completed: {updated['title']}"
+        _set_system_response(f"Marked completed: {updated['title']}")
         st.rerun()
 
     if columns[1].button("Delete", key=f"delete_{task_id}", use_container_width=True):
         delete_task(task_id)
-        st.session_state.system_response = f"Deleted: {task.get('title', 'task')}"
+        _set_system_response(f"Deleted: {task.get('title', 'task')}")
         st.rerun()
 
     if allow_postpone and columns[2].button("Postpone", key=f"postpone_{task_id}", use_container_width=True):
         new_date = _next_task_date(task)
         updated = mark_task_postponed(task_id, new_date)
-        st.session_state.system_response = f"Postponed: {updated['title']} to {new_date}"
+        _set_system_response(f"Postponed: {updated['title']} to {new_date}")
         st.rerun()
 
 
@@ -238,6 +268,12 @@ def _next_task_date(task: dict) -> str:
 def _set_selected_date(value: str) -> None:
     st.session_state.selected_date = value
     st.session_state.calendar_date_input = date.fromisoformat(value)
+
+
+def _set_system_response(message: str) -> None:
+    st.session_state.system_response = message
+    st.session_state.spoken_response = build_spoken_response(message)
+    st.session_state.voice_reply_message = "Voice reply text updated. Generate mock voice reply when ready."
 
 
 if __name__ == "__main__":
