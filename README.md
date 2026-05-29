@@ -18,7 +18,7 @@ This repository is developed in staged feature branches so the commit and PR his
 
 ## Current Stage
 
-Stage 3 adds a rule-based command parser for voice-like text input. Later branches will add calendar visualization and voice adapters.
+Stage 4 adds the Streamlit calendar interface and visual task panels. Later branches will add voice adapters.
 
 ## Project Structure
 
@@ -101,6 +101,29 @@ Example commands:
 - `我明天有什么安排`
 - `删除明天下午的算法面试`
 - `洗衣服完成了`
+
+## Calendar View
+
+The Streamlit app presents FlowCal as a voice/text calendar tool with three main areas:
+
+- Left: `Voice / Text Command`, where typed text simulates speech-to-text input.
+- Center: `Calendar View`, where the selected day shows fixed and essential tasks.
+- Right: `Task Panels`, where deadline tasks, flexible plans, and system responses are shown.
+
+Visual rules:
+
+- `fixed_event`: blue calendar time block.
+- `deadline_task`: orange deadline timeline card.
+- `essential_task`: green daily required-task bar.
+- `flexible_plan`: todo-pool card outside the calendar.
+- `completed`: gray card style across all task types.
+
+Run the UI with:
+
+```powershell
+conda activate flow_calendar
+streamlit run app.py
+```
 
 ## Development Plan
 
