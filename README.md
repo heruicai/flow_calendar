@@ -18,7 +18,7 @@ This repository is developed in staged feature branches so the commit and PR his
 
 ## Current Stage
 
-Stage 1 initializes the project structure and a runnable Streamlit entry point. Later branches will add persistent task storage, command parsing, calendar visualization, and voice adapters.
+Stage 2 adds a persistent JSON task storage system. Later branches will add command parsing, calendar visualization, and voice adapters.
 
 ## Project Structure
 
@@ -64,6 +64,15 @@ Do not install project dependencies into the system Python environment.
 conda activate flow_calendar
 streamlit run app.py
 ```
+
+## Task Storage
+
+FlowCal stores tasks in local JSON files:
+
+- `data/tasks.json`: local runtime task data. This file is created automatically when needed and is ignored by Git because it may contain private schedules.
+- `data/sample_tasks.json`: public sample data with fictional tasks for demos and tests.
+
+The storage layer lives in `src/task_store.py` and supports loading, saving, adding, updating, deleting, querying by date, listing pending tasks, marking tasks completed, and postponing tasks. JSON is saved with `ensure_ascii=False` and indentation so Chinese task titles remain readable.
 
 ## Development Plan
 
