@@ -7,8 +7,10 @@ from datetime import date, datetime, timedelta
 import streamlit as st
 
 from src.calendar_view import (
+    build_day_timeline,
     group_tasks_for_view,
-    render_calendar_day,
+    render_day_timeline,
+    render_month_calendar,
     render_task_card_html,
 )
 from src.command_parser import parse_command
@@ -50,30 +52,17 @@ def main() -> None:
     st.caption("Voice-driven visual calendar assistant")
 
     tasks = load_tasks()
-    left, middle, right = st.columns([1.05, 1.65, 1.15], gap="large")
+    left, center, right = st.columns([1.05, 2.25, 1.15], gap="large")
 
     with left:
         _render_command_panel()
 
-    selected_date = st.session_state.selected_date
-    selected_date_obj = datetime.fromisoformat(selected_date).date()
-
-    with middle:
-        st.subheader("Calendar View")
-        chosen_date = st.date_input(
-            "Select date",
-            value=selected_date_obj,
-            key="calendar_date_input",
-        )
-        if chosen_date.isoformat() != st.session_state.selected_date:
-            st.session_state.selected_date = chosen_date.isoformat()
-            selected_date = st.session_state.selected_date
-        render_calendar_day(tasks, selected_date)
-        _render_calendar_actions(tasks, selected_date)
+    with center:
+        _render_month_and_day_views(tasks)
 
     with right:
-        st.subheader("Task Panels")
-        _render_task_panels(tasks)
+        st.subheader("Flexible Task Pool")
+        _render_flexible_pool(tasks)
         st.subheader("System Response")
         st.info(st.session_state.system_response)
         st.subheader("Spoken Response / Voice Reply")
@@ -87,10 +76,11 @@ def main() -> None:
 
 
 def _init_session_state() -> None:
-    today = date.today().isoformat()
+    today = date.today()
     welcome_message = build_welcome_message()
-    st.session_state.setdefault("selected_date", today)
-    st.session_state.setdefault("calendar_date_input", date.fromisoformat(today))
+    st.session_state.setdefault("selected_date", today.isoformat())
+    st.session_state.setdefault("calendar_year", today.year)
+    st.session_state.setdefault("calendar_month", today.month)
     st.session_state.setdefault("system_response", welcome_message)
     st.session_state.setdefault("spoken_response", build_spoken_response(welcome_message))
     st.session_state.setdefault("voice_reply_message", "Voice reply has not been generated yet.")
@@ -127,6 +117,41 @@ def _render_command_panel() -> None:
 
     if st.button("Parse and Apply", type="primary", use_container_width=True):
         _handle_command(command, input_mode=input_mode)
+
+
+def _render_month_and_day_views(tasks: list[dict]) -> None:
+    st.subheader("Month Calendar")
+    control_columns = st.columns([1, 1, 2])
+    year = control_columns[0].number_input(
+        "Year",
+        min_value=2000,
+        max_value=2100,
+        value=int(st.session_state.calendar_year),
+        step=1,
+    )
+    month = control_columns[1].selectbox(
+        "Month",
+        options=list(range(1, 13)),
+        index=int(st.session_state.calendar_month) - 1,
+        format_func=lambda value: datetime(2000, value, 1).strftime("%B"),
+    )
+    st.session_state.calendar_year = int(year)
+    st.session_state.calendar_month = int(month)
+
+    selected_date = st.session_state.selected_date
+    clicked_date = render_month_calendar(
+        int(year),
+        int(month),
+        tasks,
+        selected_date=selected_date,
+    )
+    if clicked_date:
+        _set_selected_date(clicked_date)
+        st.rerun()
+
+    st.divider()
+    render_day_timeline(tasks, st.session_state.selected_date)
+    _render_day_timeline_actions(tasks, st.session_state.selected_date)
 
 
 def _handle_command(command: str, input_mode: str = "Text input") -> None:
@@ -204,29 +229,20 @@ def _find_matching_tasks(tasks: list[dict], keyword: str, query_date: str | None
     return matches
 
 
-def _render_calendar_actions(tasks: list[dict], selected_date: str) -> None:
-    groups = group_tasks_for_view(tasks, selected_date)
-    action_tasks = groups["calendar_blocks"] + groups["essential_bars"]
-    if not action_tasks:
+def _render_day_timeline_actions(tasks: list[dict], selected_date: str) -> None:
+    entries = build_day_timeline(tasks, selected_date)
+    if not entries:
         return
 
-    st.markdown("#### Quick Actions")
-    for task in action_tasks:
+    st.markdown("#### Day Actions")
+    for entry in entries:
+        task = entry["task"]
         _render_task_actions(task, allow_postpone=task.get("type") == "essential_task")
 
 
-def _render_task_panels(tasks: list[dict]) -> None:
+def _render_flexible_pool(tasks: list[dict]) -> None:
     groups = group_tasks_for_view(tasks, st.session_state.selected_date)
 
-    st.markdown("#### Deadline Timeline")
-    if groups["deadline_timeline"]:
-        for task in groups["deadline_timeline"]:
-            st.markdown(render_task_card_html(task), unsafe_allow_html=True)
-            _render_task_actions(task, allow_postpone=False)
-    else:
-        st.caption("No deadline tasks yet.")
-
-    st.markdown("#### Flexible Task Pool")
     if groups["todo_pool"]:
         for task in groups["todo_pool"]:
             st.markdown(render_task_card_html(task), unsafe_allow_html=True)
@@ -266,8 +282,10 @@ def _next_task_date(task: dict) -> str:
 
 
 def _set_selected_date(value: str) -> None:
+    selected = date.fromisoformat(value)
     st.session_state.selected_date = value
-    st.session_state.calendar_date_input = date.fromisoformat(value)
+    st.session_state.calendar_year = selected.year
+    st.session_state.calendar_month = selected.month
 
 
 def _set_system_response(message: str) -> None:
