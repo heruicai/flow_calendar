@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 
 def build_welcome_message() -> str:
@@ -28,8 +28,16 @@ def build_schedule_summary(tasks: list[dict], selected_date: str) -> str:
 
     if pending_fixed:
         pending_sections.append("固定时间任务有" + "；".join(_format_fixed_task(task) for task in pending_fixed))
-    if pending_deadline:
-        pending_sections.append("截止任务有" + "；".join(_format_deadline_task(task) for task in pending_deadline))
+    due_deadline = [task for task in pending_deadline if _deadline_date(task) == selected_date]
+    ongoing_deadline = [task for task in pending_deadline if _deadline_date(task) != selected_date]
+    if due_deadline:
+        pending_sections.append(
+            "截止任务有" + "；".join(_format_deadline_task(task, selected_date) for task in due_deadline)
+        )
+    if ongoing_deadline:
+        pending_sections.append(
+            "还有进行中的截止任务：" + "；".join(_format_deadline_task(task, selected_date) for task in ongoing_deadline)
+        )
     if pending_essential:
         pending_sections.append("生活必需任务有" + "；".join(_format_essential_task(task) for task in pending_essential))
 
@@ -59,12 +67,25 @@ def _tasks_for_date(tasks: list[dict], selected_date: str, task_type: str) -> li
 
 
 def _deadline_tasks_for_date(tasks: list[dict], selected_date: str) -> list[dict]:
-    return [
-        task
-        for task in tasks
-        if task.get("type") == "deadline_task"
-        and str(task.get("deadline") or "").startswith(selected_date)
-    ]
+    selected_day = date.fromisoformat(selected_date)
+    matching_tasks = []
+    for task in tasks:
+        if task.get("type") != "deadline_task":
+            continue
+
+        deadline = _parse_datetime(task.get("deadline"))
+        if not deadline:
+            continue
+
+        if task.get("status") == "completed":
+            if deadline.date() == selected_day:
+                matching_tasks.append(task)
+            continue
+
+        created_at = _parse_datetime(task.get("created_at"))
+        if deadline.date() >= selected_day and (not created_at or created_at.date() <= selected_day):
+            matching_tasks.append(task)
+    return matching_tasks
 
 
 def _partition_completed(tasks: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -84,9 +105,12 @@ def _format_fixed_task(task: dict) -> str:
     return title
 
 
-def _format_deadline_task(task: dict) -> str:
+def _format_deadline_task(task: dict, selected_date: str) -> str:
     details = [_task_title(task)]
     if task.get("deadline"):
+        deadline_label = _deadline_relative_label(task, selected_date)
+        if deadline_label:
+            details.append(deadline_label)
         details.append(f"截止时间是{_format_datetime(task['deadline'])}")
     if task.get("estimated_duration_minutes"):
         details.append(f"预计需要{_format_duration(task['estimated_duration_minutes'])}")
@@ -105,11 +129,54 @@ def _format_essential_task(task: dict) -> str:
 
 
 def _format_datetime(value: str) -> str:
-    try:
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
+    parsed = _parse_datetime(value)
+    if not parsed:
         return value
-    return parsed.strftime("%Y-%m-%d %H:%M")
+    return f"{parsed:%Y-%m-%d} {_format_time(parsed)}"
+
+
+def _deadline_date(task: dict) -> str | None:
+    deadline = _parse_datetime(task.get("deadline"))
+    return deadline.date().isoformat() if deadline else None
+
+
+def _deadline_relative_label(task: dict, selected_date: str) -> str:
+    deadline = _parse_datetime(task.get("deadline"))
+    if not deadline or deadline.date().isoformat() != selected_date:
+        return ""
+
+    selected_day = date.fromisoformat(selected_date)
+    if selected_day == date.today():
+        return "今天截止"
+    if selected_day == date.today() + timedelta(days=1):
+        return "明天截止"
+    return "查询当天截止"
+
+
+def _format_time(value: datetime) -> str:
+    hour = value.hour
+    display_hour = hour % 12 or 12
+    if hour < 6:
+        period = "凌晨"
+    elif hour < 12:
+        period = "上午"
+    elif hour < 14:
+        period = "中午"
+    elif hour < 18:
+        period = "下午"
+    else:
+        period = "晚上"
+    minute = "" if value.minute == 0 else f"{value.minute:02d}分"
+    return f"{period}{display_hour}点{minute}"
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _format_duration(minutes: int) -> str:
