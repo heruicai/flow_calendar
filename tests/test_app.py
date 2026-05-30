@@ -246,17 +246,19 @@ def test_tts_failure_keeps_text_reply_visible():
     assert any(item.value == "已添加算法面试。" for item in app.info)
 
 
-def test_update_event_does_not_enter_add_confirmation(monkeypatch):
-    completed_messages = []
+def test_update_event_builds_pending_update_action(monkeypatch):
+    state = SimpleNamespace(pending_action=None, dialog_state="idle")
+    task = {"id": "laundry", "title": "洗衣服", "type": "essential_task", "date": "2026-05-29"}
+    responses = []
 
-    monkeypatch.setattr(
-        app_module,
-        "create_pending_action",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not add pending action")),
-    )
-    monkeypatch.setattr(app_module, "_complete_voice_round", completed_messages.append)
+    monkeypatch.setattr(app_module.st, "session_state", state)
+    monkeypatch.setattr(app_module, "load_tasks", lambda: [task])
+    monkeypatch.setattr(app_module, "_set_system_response", lambda message, speak=False: responses.append(message))
 
     app_module._handle_command("把洗衣服改到明天")
 
-    assert completed_messages
-    assert "Edit time / Edit deadline / Edit type" in completed_messages[0]
+    assert state.dialog_state == "awaiting_confirmation"
+    assert state.pending_action["intent"] == "update_event"
+    assert state.pending_action["update_plan"]["matched_task"]["id"] == "laundry"
+    assert state.pending_action["update_plan"]["updates"]["date"]
+    assert "我找到任务：洗衣服" in responses[0]

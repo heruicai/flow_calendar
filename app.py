@@ -22,6 +22,7 @@ from src.dialog_manager import (
     create_pending_action,
 )
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
+from src.semantic_command_assistant import build_update_plan
 from src.task_store import (
     delete_task,
     load_tasks,
@@ -245,7 +246,18 @@ def _handle_command(command: str) -> None:
         return
 
     if intent == "update_event":
-        _complete_voice_round(build_parse_response(parsed))
+        update_plan = build_update_plan(parsed, load_tasks())
+        if update_plan.get("need_clarification"):
+            _set_system_response(update_plan["clarification_question"], speak=True)
+            return
+        pending_action = create_pending_action(
+            parsed,
+            matched_task=update_plan.get("matched_task"),
+            update_plan=update_plan,
+        )
+        st.session_state.pending_action = pending_action
+        st.session_state.dialog_state = "awaiting_confirmation"
+        _set_system_response(build_confirmation_prompt(pending_action), speak=True)
         return
 
     if intent in {"mark_completed", "delete_event"}:
@@ -280,6 +292,7 @@ def _confirmation_button_label(pending_action: dict | None) -> str:
         "add_event": "确认添加",
         "delete_event": "确认删除",
         "mark_completed": "确认完成",
+        "update_event": "确认修改",
     }.get(intent, "确认操作")
 
 
