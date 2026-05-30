@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def build_welcome_message() -> str:
     """Return the default message shown before a command is submitted."""
-    return "Enter a voice-like command or text command to update FlowCal."
+    return "Record a voice command or use the text fallback to update FlowCal."
 
 
 def build_schedule_summary(tasks: list[dict], selected_date: str) -> str:

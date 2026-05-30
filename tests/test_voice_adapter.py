@@ -1,17 +1,13 @@
-from src.voice_adapter import (
-    build_spoken_response,
-    get_voice_input_mode_description,
-    normalize_voice_text,
-    text_to_speech,
-)
+from src import voice_adapter
+from src.voice_adapter import build_spoken_response, normalize_voice_text, speech_to_text, text_to_speech
 
 
-def test_normalize_voice_text_handles_spaces_and_punctuation():
-    text = " 嗯  明天 下午 三点, 提醒我复习。 "
+def test_normalize_voice_text_handles_spaces_punctuation_and_fillers():
+    text = " 嗯 明天 下午 三点, 请帮我 复习。 "
 
     normalized = normalize_voice_text(text)
 
-    assert normalized == "明天下午三点，提醒我复习"
+    assert normalized == "明天下午三点，复习"
 
 
 def test_build_spoken_response_removes_markdown_and_truncates():
@@ -26,17 +22,24 @@ def test_build_spoken_response_removes_markdown_and_truncates():
     assert len(spoken) <= 140
 
 
-def test_text_to_speech_mock_does_not_raise():
-    result = text_to_speech("Added: 洗衣服")
+def test_text_to_speech_returns_controlled_error_when_tts_is_unavailable(monkeypatch):
+    def raise_import_error():
+        raise RuntimeError("tts unavailable")
 
-    assert result["success"] is True
-    assert result["mode"] == "mock"
-    assert result["spoken_text"] == "Added: 洗衣服"
+    monkeypatch.setattr(voice_adapter, "_load_pyttsx3", raise_import_error)
+
+    result = text_to_speech("已添加洗衣服。")
+
+    assert result["success"] is False
+    assert result["mode"] == "fallback"
+    assert result["audio_path"] == ""
+    assert "tts unavailable" in result["message"]
+
+
+def test_speech_to_text_without_audio_returns_controlled_error():
+    result = speech_to_text(None)
+
+    assert result["success"] is False
+    assert result["mode"] == "fallback"
+    assert result["text"] == ""
     assert result["message"]
-
-
-def test_get_voice_input_mode_description_returns_text():
-    description = get_voice_input_mode_description()
-
-    assert description
-    assert "simulated speech-to-text" in description

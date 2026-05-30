@@ -2,9 +2,7 @@
 
 ## 1. Project Overview
 
-FlowCal is a voice-driven visual calendar management assistant for the theme "voice version of a calendar tool". It supports voice-like or text commands to add, delete, query, and complete calendar reminders, then returns three forms of feedback: text response, voice-reply text, and visual calendar view.
-
-The current version uses stable simulated voice input: typed text can be treated as speech-to-text output. Real ASR and TTS integrations are reserved through adapter interfaces.
+FlowCal is a voice-driven visual calendar management assistant for the theme "voice version of a calendar tool". It supports microphone or text commands to add, delete, query, and complete calendar reminders, then returns text, local speech audio, and a visual calendar view.
 
 ## 2. User Needs
 
@@ -18,12 +16,12 @@ FlowCal is designed for users who manage plans under real time pressure:
 
 ## 3. Core Features
 
-- Voice/Text command input.
+- Push-to-talk microphone input with editable transcription.
 - Add calendar tasks.
 - Delete tasks.
 - Query schedule.
 - Mark tasks completed.
-- Voice-style response.
+- Offline voice confirmation and final response.
 - Visual calendar view.
 - Local JSON task storage.
 
@@ -39,17 +37,16 @@ FlowCal separates tasks into four visual categories:
 
 ## 5. Voice Interaction Design
 
-FlowCal currently supports two input modes:
+FlowCal uses a push-to-talk voice conversation as the primary flow:
 
-- `Text input`: the user types a command directly.
-- `Simulated voice input`: the user types text that is treated as speech-to-text output.
+1. The browser records microphone audio through Streamlit `st.audio_input`.
+2. `faster-whisper` transcribes the recording locally. The transcription remains editable before parsing.
+3. Add, delete, and completion commands produce a spoken confirmation question.
+4. The user records a second short answer: `确认` or `取消`.
+5. Confirmed changes are written to the local task store and the final result is spoken aloud.
+6. Schedule queries return a spoken result immediately without a confirmation round.
 
-Both modes pass through `src/voice_adapter.py` and then enter the same command parser. The adapter includes reserved interfaces:
-
-- `speech_to_text(audio_file=None)`: reserved ASR entry point.
-- `text_to_speech(response_text)`: mock TTS entry point that returns voice-reply metadata.
-
-The current version does not depend on external API keys or cloud voice services. Future versions can connect Whisper, browser speech recognition, or local TTS engines.
+`pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The first ASR run downloads the selected Whisper model if it is not already cached; after that, transcription runs locally. Text command input remains available as a fallback.
 
 ## 6. Calendar Visualization Design
 
@@ -69,15 +66,17 @@ Main modules:
 - `src/task_store.py`: JSON-backed local persistence for tasks and completion state.
 - `src/command_parser.py`: rule-based natural-language command parser.
 - `src/calendar_view.py`: task grouping, style mapping, and visual calendar rendering helpers.
-- `src/voice_adapter.py`: simulated voice input normalization and mock ASR/TTS adapter.
+- `src/voice_adapter.py`: microphone recording transcription and local WAV speech output.
+- `src/dialog_manager.py`: pending-action confirmation prompts and confirmed mutations.
 - `src/response_generator.py`: text response and schedule summary helpers.
 
 Flow:
 
 ```text
-Voice/Text Input
+Microphone/Text Input
 -> voice_adapter
 -> command_parser
+-> dialog_manager confirmation
 -> task_store
 -> calendar_view
 -> response_generator / voice_adapter
@@ -92,17 +91,19 @@ Create the project environment:
 conda create -n flow_calendar python=3.11
 conda activate flow_calendar
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app.py --server.port 8501
 ```
 
 If the environment already exists:
 
 ```powershell
 conda activate flow_calendar
-streamlit run app.py
+streamlit run app.py --server.port 8501
 ```
 
 Do not install project dependencies into the system Python environment.
+
+Open the local URL shown by Streamlit and allow microphone access in the browser. For local development, browsers generally permit microphone access on `localhost`. The default local ASR model is `base`; set `FLOWCAL_WHISPER_MODEL=small` before launching Streamlit when a larger, more accurate local model is preferred.
 
 ## 9. Example Commands
 
@@ -122,14 +123,14 @@ Demo video: To be updated.
 
 Planned demo content:
 
-- Simulated voice input.
+- Real microphone voice input.
 - Add a `fixed_event`.
 - Add a `deadline_task`.
 - Add an `essential_task`.
 - Add a `flexible_plan`.
 - Query schedule.
 - Mark a task completed and show the gray completed style.
-- Generate a voice reply.
+- Hear spoken confirmation and final replies.
 
 ## 11. Dependencies
 
@@ -137,8 +138,10 @@ Third-party dependencies:
 
 - `streamlit`: web app UI framework.
 - `pytest`: automated test runner.
+- `faster-whisper`: offline ASR inference after the Whisper model has been downloaded locally.
+- `pyttsx3`: offline TTS generation; on Windows it uses the installed SAPI voices.
 
-No external voice API is used. No API key is required. No additional voice dependency is introduced in the current version.
+No external voice API is used. No API key is required. Whisper model preparation requires network access only when the model is not already cached. Generated WAV files live under `outputs/audio/` and are ignored by Git.
 
 ## 12. Original Work
 
