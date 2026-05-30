@@ -29,6 +29,8 @@ def _glm_result(intent, **overrides):
         "confidence": 0.95,
         "parse_reason": "mock GLM parse",
         "response_text": "",
+        "normalized_text": "",
+        "corrections": [],
     }
     result.update(overrides)
     return result
@@ -52,6 +54,7 @@ def test_parse_user_command_falls_back_without_api_key(monkeypatch):
 
     assert result["source"] == "rule"
     assert result["intent"] == "add_event"
+    assert result["normalized_text"] == "明天下午三点面试"
 
 
 def test_parse_user_command_falls_back_for_invalid_json(monkeypatch):
@@ -120,6 +123,43 @@ def test_parse_user_command_accepts_glm_update_event(monkeypatch):
 
     assert result["source"] == "glm"
     assert result["updates"]["start_time"] == "16:00"
+
+
+def test_parse_user_command_returns_corrected_glm_text(monkeypatch):
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-key")
+    monkeypatch.setattr(
+        glm_parser,
+        "parse_with_glm",
+        lambda *args, **kwargs: _glm_result(
+            "update_event",
+            target={"keyword": "算法面试"},
+            updates={"date": "2026-05-30", "start_time": "16:00", "end_time": "17:00"},
+            normalized_text="把算法面试改到明天下午四点",
+            corrections=[
+                {
+                    "from": "蒜粉面试",
+                    "to": "算法面试",
+                    "reason": "结合已有任务标题修正 ASR 误识别",
+                }
+            ],
+        ),
+    )
+
+    result = parse_user_command("把蒜粉面试改到明天下午四点", now=NOW)
+
+    assert result["normalized_text"] == "把算法面试改到明天下午四点"
+    assert result["corrections"][0]["to"] == "算法面试"
+
+
+def test_validate_glm_parse_result_rejects_invalid_corrections():
+    with pytest.raises(ValueError, match="corrections"):
+        validate_glm_parse_result(
+            _glm_result(
+                "query_schedule",
+                query={"date": "2026-05-30", "keyword": ""},
+                corrections="not-a-list",
+            )
+        )
 
 
 def test_parse_user_command_accepts_glm_add_event(monkeypatch):

@@ -81,7 +81,10 @@ Requirements:
 - Resolve relative dates using the current datetime and emit ISO dates.
 - Handle schedule queries, adds, deletes, completions, fixed-event rescheduling,
   deadline changes, and task-type changes.
-- Correct obvious ASR mistakes only when confidence is high.
+- Return normalized_text containing the corrected Chinese command used for parsing.
+- Return corrections as a JSON list describing high-confidence ASR or typo corrections.
+- Correct obvious ASR mistakes only when confidence is high. Use existing task titles as
+  evidence when correcting task names. Preserve the original wording when uncertain.
 - For update_event, put the existing task clues in target and requested changes in updates.
 - If required details are uncertain, set need_clarification=true and ask a specific question.
 - confidence must be a number from 0 to 1.
@@ -96,6 +99,8 @@ Return this compatible shape:
   "query": {{"date": null, "keyword": ""}},
   "target": {{"keyword": "", "date": null, "start_time": null, "end_time": null}},
   "updates": {{}},
+  "normalized_text": "corrected user command",
+  "corrections": [{{"from": "ASR text", "to": "corrected text", "reason": "brief reason"}}],
   "confidence": 0.0,
   "parse_reason": "",
   "response_text": ""
@@ -130,6 +135,12 @@ def validate_glm_parse_result(result: dict) -> dict:
         if value is not None and not isinstance(value, dict):
             raise ValueError(f"GLM {field} must be a dictionary.")
     _validate_display_mode(validated.get("updates") or {})
+    normalized_text = validated.get("normalized_text", "")
+    if not isinstance(normalized_text, str):
+        raise ValueError("GLM normalized_text must be a string.")
+    corrections = validated.get("corrections", [])
+    if not isinstance(corrections, list) or not all(isinstance(item, dict) for item in corrections):
+        raise ValueError("GLM corrections must be a list of dictionaries.")
     if intent == "add_event" and not isinstance(task, dict):
         raise ValueError("GLM add_event requires a task dictionary.")
     if intent == "query_schedule" and not isinstance(validated.get("query"), dict):
@@ -146,6 +157,8 @@ def validate_glm_parse_result(result: dict) -> dict:
     validated.setdefault("updates", {})
     validated.setdefault("parse_reason", "")
     validated.setdefault("response_text", "")
+    validated.setdefault("normalized_text", "")
+    validated.setdefault("corrections", [])
     validated["source"] = "glm"
     return validated
 
@@ -157,11 +170,14 @@ def parse_user_command(text: str, now=None, tasks=None, use_ai=True) -> dict:
         try:
             parsed = validate_glm_parse_result(parse_with_glm(normalized, now=now, tasks=tasks))
             if parsed["confidence"] >= MIN_GLM_CONFIDENCE:
+                parsed["normalized_text"] = normalize_voice_text(parsed.get("normalized_text") or normalized)
                 return parsed
         except Exception:
             pass
     fallback = parse_command(normalized, now=now)
     fallback["source"] = "rule"
+    fallback["normalized_text"] = normalized
+    fallback["corrections"] = []
     return fallback
 
 

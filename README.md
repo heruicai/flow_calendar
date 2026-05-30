@@ -152,6 +152,8 @@ No external voice API is used. No API key is required. Whisper model preparation
 
 FlowCal supports an optional GLM AI semantic parser for more flexible calendar commands and complex task updates. The local rule-based parser remains the default when no API key is configured. If GLM fails, times out, returns invalid JSON, or returns an unsupported structure, FlowCal automatically falls back to the local parser.
 
+When GLM confidently corrects an ASR mistake or typo, FlowCal displays the corrected `Normalized user input` in the conversation panel and uses that text for semantic parsing. Uncertain text is preserved instead of being rewritten aggressively.
+
 Configure GLM with environment variables. Never write API keys into source code or commit them to GitHub.
 
 Windows PowerShell:

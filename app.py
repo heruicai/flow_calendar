@@ -127,6 +127,7 @@ def _init_session_state() -> None:
         "command_audio_nonce": 0,
         "asr_message": "",
         "parser_source": "rule",
+        "last_normalized_command": "",
         "editing_task_id": None,
         "editing_mode": None,
         "editing_context": None,
@@ -146,6 +147,13 @@ def _render_voice_conversation() -> None:
             else "AI parser: Rule fallback"
         )
         st.caption(f"Last parse source: {st.session_state.parser_source}")
+    if st.session_state.last_normalized_command:
+        st.text_area(
+            "Normalized user input",
+            value=st.session_state.last_normalized_command,
+            height=68,
+            disabled=True,
+        )
 
     state = st.session_state.dialog_state
     if state == "idle":
@@ -241,6 +249,7 @@ def _handle_command(command: str) -> None:
 
     parsed = parse_user_command(normalized_command, tasks=load_tasks())
     st.session_state.parser_source = parsed.get("source", "rule")
+    st.session_state.last_normalized_command = parsed.get("normalized_text", normalized_command)
     if parsed.get("need_clarification"):
         _set_system_response(build_parse_response(parsed), speak=True)
         return
@@ -373,6 +382,7 @@ def _reset_voice_round() -> None:
     st.session_state.command_text = ""
     st.session_state.command_audio_nonce += 1
     st.session_state.asr_message = ""
+    st.session_state.last_normalized_command = ""
     st.session_state.voice_reply = None
     st.session_state.system_response = build_welcome_message()
 
