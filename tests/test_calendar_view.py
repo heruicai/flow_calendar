@@ -7,6 +7,7 @@ from src.calendar_view import (
     group_tasks_for_view,
     render_day_timeline,
 )
+from src.task_store import add_task, load_tasks, update_fixed_event_time, update_task_type
 
 
 def test_build_month_calendar_returns_week_structure():
@@ -144,3 +145,53 @@ def test_day_timeline_renders_actions_for_each_specific_task(monkeypatch):
     )
 
     assert rendered_task_ids == ["essential-1", "fixed-1"]
+
+
+def test_type_change_to_flexible_plan_removes_task_from_day_timeline(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task(
+        {
+            "title": "Interview",
+            "type": "fixed_event",
+            "date": "2026-05-30",
+            "start_time": "15:00",
+            "end_time": "16:00",
+        },
+        path,
+    )
+
+    update_task_type(task["id"], "flexible_plan", path=path)
+    tasks = load_tasks(path)
+
+    assert build_day_timeline(tasks, "2026-05-30") == []
+    assert group_tasks_for_view(tasks, "2026-05-30")["todo_pool"][0]["id"] == task["id"]
+
+
+def test_type_change_to_essential_task_enters_selected_day_timeline(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task({"title": "Laundry", "type": "flexible_plan"}, path)
+
+    update_task_type(task["id"], "essential_task", selected_date="2026-05-30", path=path)
+    entries = build_day_timeline(load_tasks(path), "2026-05-30")
+
+    assert [entry["task_id"] for entry in entries] == [task["id"]]
+
+
+def test_fixed_event_time_update_moves_month_indicator(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task(
+        {
+            "title": "Interview",
+            "type": "fixed_event",
+            "date": "2026-05-30",
+            "start_time": "15:00",
+            "end_time": "16:00",
+        },
+        path,
+    )
+
+    update_fixed_event_time(task["id"], "2026-05-31", "09:00", "10:00", path)
+    tasks = load_tasks(path)
+
+    assert get_task_indicators_for_date(tasks, "2026-05-30")["fixed_event"] == 0
+    assert get_task_indicators_for_date(tasks, "2026-05-31")["fixed_event"] == 1

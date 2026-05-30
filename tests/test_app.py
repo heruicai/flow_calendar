@@ -4,7 +4,7 @@ from inspect import getsource
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
-from app import _render_page_styles, _task_action_specs, main
+from app import _render_page_styles, _task_action_specs, _task_editor_specs, main
 
 
 def test_page_has_one_primary_voice_input_area():
@@ -46,7 +46,20 @@ def test_task_action_specs_bind_unique_keys_to_each_task_id():
     assert len(keys) == len(set(keys))
     assert ("complete", "timeline_complete_deadline-1") in first
     assert ("delete", "timeline_delete_deadline-1") in first
-    assert ("postpone", "timeline_postpone_deadline-1") in first
+    assert ("postpone", "timeline_postpone_deadline-1") not in first
+
+
+def test_task_actions_and_editors_follow_task_type():
+    fixed = {"id": "fixed", "type": "fixed_event"}
+    deadline = {"id": "deadline", "type": "deadline_task"}
+    essential = {"id": "essential", "type": "essential_task"}
+
+    assert "postpone" not in dict(_task_action_specs(fixed, "timeline"))
+    assert _task_editor_specs(fixed) == ["edit_time", "edit_type"]
+    assert "postpone" not in dict(_task_action_specs(deadline, "timeline"))
+    assert _task_editor_specs(deadline) == ["edit_deadline", "edit_type"]
+    assert "postpone" in dict(_task_action_specs(essential, "timeline"))
+    assert _task_editor_specs(essential) == ["edit_type"]
 
 
 def test_completed_task_action_specs_offer_undo_and_delete():
@@ -71,6 +84,7 @@ def test_task_action_click_targets_its_own_task_id(monkeypatch):
     monkeypatch.setattr(app_module.st, "columns", lambda count: [FakeColumn() for _ in range(count)])
     monkeypatch.setattr(app_module, "delete_task", deleted_task_ids.append)
     monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+    monkeypatch.setattr(app_module, "_render_task_editors", lambda task, context: None)
     monkeypatch.setattr(app_module.st, "rerun", lambda: None)
 
     app_module._render_task_actions(
@@ -95,6 +109,7 @@ def test_undo_completed_click_targets_its_own_task_id(monkeypatch):
         lambda task_id: pending_task_ids.append(task_id) or {"title": "Laundry"},
     )
     monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+    monkeypatch.setattr(app_module, "_render_task_editors", lambda task, context: None)
     monkeypatch.setattr(app_module.st, "rerun", lambda: None)
 
     app_module._render_task_actions(

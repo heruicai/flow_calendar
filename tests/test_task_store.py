@@ -12,6 +12,9 @@ from src.task_store import (
     load_tasks,
     mark_task_completed,
     mark_task_pending,
+    update_deadline_task,
+    update_fixed_event_time,
+    update_task_type,
 )
 
 
@@ -106,3 +109,98 @@ def test_missing_tasks_file_does_not_raise(tmp_path):
     assert tasks == []
     assert path.exists()
     assert json.loads(path.read_text(encoding="utf-8")) == []
+
+
+def test_update_fixed_event_time_persists_schedule_fields(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task(
+        {
+            "title": "Interview",
+            "type": "fixed_event",
+            "date": "2026-05-30",
+            "start_time": "15:00",
+            "end_time": "16:00",
+        },
+        path,
+    )
+
+    updated = update_fixed_event_time(task["id"], "2026-06-01", "09:00", "10:30", path)
+
+    assert updated is not None
+    assert updated["date"] == "2026-06-01"
+    assert updated["start_time"] == "09:00"
+    assert updated["end_time"] == "10:30"
+    assert get_task_by_id(task["id"], path) == updated
+
+
+def test_update_deadline_task_recalculates_latest_start(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task({"title": "Report", "type": "deadline_task"}, path)
+
+    updated = update_deadline_task(task["id"], "2026-06-05T23:00:00", 180, path)
+
+    assert updated is not None
+    assert updated["deadline"] == "2026-06-05T23:00:00"
+    assert updated["estimated_duration_minutes"] == 180
+    assert updated["latest_start_time"] == "2026-06-05T20:00:00"
+
+
+def test_update_task_type_sets_display_mode_and_essential_default_date(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task({"title": "Laundry", "type": "flexible_plan"}, path)
+
+    updated = update_task_type(task["id"], "essential_task", selected_date="2026-06-01", path=path)
+
+    assert updated is not None
+    assert updated["type"] == "essential_task"
+    assert updated["display_mode"] == "essential_bar"
+    assert updated["date"] == "2026-06-01"
+
+
+def test_update_task_type_sets_display_mode_for_each_target_type(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task({"title": "Plan", "type": "flexible_plan"}, path)
+
+    fixed = update_task_type(
+        task["id"],
+        "fixed_event",
+        updates={"date": "2026-06-01", "start_time": "09:00", "end_time": "10:00"},
+        path=path,
+    )
+    deadline = update_task_type(
+        task["id"],
+        "deadline_task",
+        updates={"deadline": "2026-06-02T18:00:00"},
+        path=path,
+    )
+    essential = update_task_type(task["id"], "essential_task", selected_date="2026-06-03", path=path)
+    flexible = update_task_type(task["id"], "flexible_plan", path=path)
+
+    assert fixed["display_mode"] == "calendar_block"
+    assert deadline["display_mode"] == "deadline_bar"
+    assert essential["display_mode"] == "essential_bar"
+    assert flexible["display_mode"] == "todo_pool"
+
+
+def test_update_task_type_requires_fixed_event_schedule_fields(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task({"title": "Interview", "type": "flexible_plan"}, path)
+
+    try:
+        update_task_type(task["id"], "fixed_event", path=path)
+    except ValueError as exc:
+        assert "require date, start time, and end time" in str(exc)
+    else:
+        raise AssertionError("Expected incomplete fixed event conversion to fail.")
+
+
+def test_update_task_type_requires_deadline(tmp_path):
+    path = storage_path(tmp_path)
+    task = add_task({"title": "Report", "type": "flexible_plan"}, path)
+
+    try:
+        update_task_type(task["id"], "deadline_task", path=path)
+    except ValueError as exc:
+        assert "require a deadline" in str(exc)
+    else:
+        raise AssertionError("Expected deadline conversion without a deadline to fail.")
