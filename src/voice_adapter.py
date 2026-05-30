@@ -14,10 +14,75 @@ DEFAULT_WHISPER_MODEL = "base"
 OUTPUT_AUDIO_DIR = Path("outputs/audio")
 _WHISPER_MODELS: dict[str, object] = {}
 
+TRADITIONAL_PHRASES = {
+    "語音": "语音",
+    "識別": "识别",
+    "確認": "确认",
+    "標記": "标记",
+    "任務": "任务",
+    "查詢": "查询",
+    "時間": "时间",
+    "截止時間": "截止时间",
+    "已將": "已将",
+    "還有": "还有",
+    "會議": "会议",
+    "開會": "开会",
+    "報告": "报告",
+    "結束": "结束",
+    "請": "请",
+    "這個": "这个",
+}
+
+TRADITIONAL_CHARACTERS = str.maketrans(
+    {
+        "語": "语",
+        "音": "音",
+        "識": "识",
+        "別": "别",
+        "確": "确",
+        "認": "认",
+        "標": "标",
+        "記": "记",
+        "務": "务",
+        "詢": "询",
+        "時": "时",
+        "間": "间",
+        "將": "将",
+        "還": "还",
+        "會": "会",
+        "議": "议",
+        "開": "开",
+        "報": "报",
+        "結": "结",
+        "束": "束",
+        "請": "请",
+        "這": "这",
+        "個": "个",
+        "刪": "删",
+        "除": "除",
+        "體": "体",
+        "檢": "检",
+        "後": "后",
+        "週": "周",
+        "裡": "里",
+        "寫": "写",
+        "買": "买",
+        "藥": "药",
+    }
+)
+
+
+def normalize_chinese_text(text: str) -> str:
+    """Convert common Traditional Chinese ASR output to Simplified Chinese."""
+    normalized = str(text or "")
+    for traditional, simplified in TRADITIONAL_PHRASES.items():
+        normalized = normalized.replace(traditional, simplified)
+    return normalized.translate(TRADITIONAL_CHARACTERS)
+
 
 def normalize_voice_text(text: str) -> str:
     """Normalize ASR output before command parsing."""
-    normalized = str(text or "").strip()
+    normalized = normalize_chinese_text(text).strip()
     normalized = re.sub(r"\s+", "", normalized)
     normalized = normalized.replace(",", "，")
     normalized = normalized.replace("。", "").replace(".", "")
@@ -90,7 +155,7 @@ def text_to_speech(response_text: str) -> dict:
 
 def build_spoken_response(response_text: str) -> str:
     """Convert a system response into a concise voice-friendly sentence."""
-    spoken_text = str(response_text or "").strip()
+    spoken_text = normalize_chinese_text(response_text).strip()
     spoken_text = re.sub(r"<[^>]+>", " ", spoken_text)
     spoken_text = re.sub(r"[#>*_`~\[\]()]|^-+\s*", " ", spoken_text)
     spoken_text = re.sub(r"\s+", " ", spoken_text).strip()

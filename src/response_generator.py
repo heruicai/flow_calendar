@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+from src.voice_adapter import normalize_chinese_text
+
 
 def build_welcome_message() -> str:
     """Return the default message shown before a command is submitted."""
@@ -55,7 +57,7 @@ def build_schedule_summary(tasks: list[dict], selected_date: str) -> str:
     if completed_tasks:
         titles = "、".join(_task_title(task) for task in completed_tasks)
         summary += f"已完成事项有{titles}。"
-    return summary
+    return normalize_chinese_text(summary)
 
 
 def _tasks_for_date(tasks: list[dict], selected_date: str, task_type: str) -> list[dict]:
@@ -201,11 +203,11 @@ def _task_title(task: dict) -> str:
 def build_parse_response(parsed: dict) -> str:
     """Return a human-readable response for parser output."""
     if parsed.get("need_clarification"):
-        return parsed.get("clarification_question") or "Please provide more details."
+        return normalize_chinese_text(parsed.get("clarification_question") or "Please provide more details.")
 
     response_text = parsed.get("response_text")
     if response_text:
-        return response_text
+        return normalize_chinese_text(response_text)
 
     intent = parsed.get("intent")
     if intent == "add_event":
