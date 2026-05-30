@@ -87,20 +87,20 @@ TRADITIONAL_CHARACTERS = str.maketrans(
 
 
 def normalize_chinese_text(text: str) -> str:
-    """Convert Chinese text to Simplified Chinese with lightweight local rules."""
+    """Convert Chinese text to Simplified Chinese without semantic rewriting."""
     normalized = str(text or "")
     for traditional, simplified in TRADITIONAL_PHRASES.items():
         normalized = normalized.replace(traditional, simplified)
     normalized = normalized.translate(TRADITIONAL_CHARACTERS)
     normalized = _get_opencc_converter().convert(normalized)
-    for mistaken, corrected in COMMON_ASR_PHRASES.items():
-        normalized = normalized.replace(mistaken, corrected)
     return normalized
 
 
 def normalize_voice_text(text: str) -> str:
     """Normalize ASR output before command parsing."""
     normalized = normalize_chinese_text(text).strip()
+    for mistaken, corrected in COMMON_ASR_PHRASES.items():
+        normalized = normalized.replace(mistaken, corrected)
     normalized = re.sub(r"\s+", "", normalized)
     normalized = normalized.replace(",", "，")
     normalized = normalized.replace("。", "").replace(".", "")
@@ -112,30 +112,25 @@ def normalize_voice_text(text: str) -> str:
     return normalized.strip("，。？！?! ")
 
 
-def speech_to_text(audio_file=None) -> dict:
-    """Transcribe a Streamlit microphone recording locally with faster-whisper."""
+def speech_to_text(audio_file=None, *, tasks: list[dict] | None = None) -> dict:
+    """Transcribe locally through the context-aware ASR pipeline."""
     if audio_file is None:
         return _asr_error("没有收到录音，请点击麦克风按钮后再试。")
 
     temp_path: Path | None = None
     try:
         audio_path, temp_path = _materialize_audio_file(audio_file)
-        model_name = os.getenv("FLOWCAL_WHISPER_MODEL", DEFAULT_WHISPER_MODEL)
-        model = _get_whisper_model(model_name)
-        segments, _ = model.transcribe(
-            str(audio_path),
-            language="zh",
-            vad_filter=True,
-            beam_size=5,
-        )
-        text = normalize_voice_text("".join(segment.text for segment in segments))
+        from src.voice_pipeline import transcribe_audio
+
+        pipeline_result = transcribe_audio(audio_path, tasks=tasks)
+        text = pipeline_result["text"]
         if not text:
             return _asr_error("没有识别到清晰语音，请重新录音。", mode="whisper")
         return {
             "success": True,
             "text": text,
-            "message": "已在本机完成语音识别。",
-            "mode": "whisper",
+            "message": "已在本机完成语音识别和上下文纠错。",
+            **pipeline_result,
         }
     except Exception as exc:  # pragma: no cover - depends on local audio runtime
         return _asr_error(f"本地语音识别失败：{exc}")
@@ -187,8 +182,8 @@ def build_spoken_response(response_text: str) -> str:
 def get_voice_input_mode_description() -> str:
     """Return the privacy-oriented voice runtime description."""
     return (
-        "麦克风录音通过 st.audio_input 获取，faster-whisper 在本机转写，"
-        "pyttsx3 在本机生成语音回复。录音不会上传到外部服务。"
+        "麦克风录音通过 st.audio_input 获取，本地 ASR 转写后使用任务上下文纠错，"
+        "pyttsx3 在本机生成语音回复。默认不会上传录音，也不会调用付费语音 API。"
     )
 
 

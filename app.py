@@ -126,6 +126,7 @@ def _init_session_state() -> None:
         "command_text": "",
         "command_audio_nonce": 0,
         "asr_message": "",
+        "last_asr_result": None,
         "parser_source": "rule",
         "last_normalized_command": "",
         "editing_task_id": None,
@@ -147,6 +148,16 @@ def _render_voice_conversation() -> None:
             else "AI parser: Rule fallback"
         )
         st.caption(f"Last parse source: {st.session_state.parser_source}")
+        asr_result = st.session_state.last_asr_result or {}
+        if asr_result:
+            st.caption(f"ASR source: {asr_result.get('mode', 'local')}")
+            st.caption(
+                "Correction confidence: "
+                f"{float(asr_result.get('confidence', 0.0)):.2f}; "
+                f"needs confirmation: {bool(asr_result.get('needs_confirmation'))}"
+            )
+            if asr_result.get("raw_text") != asr_result.get("corrected_text"):
+                st.caption(f"ASR raw text: {asr_result.get('raw_text', '')}")
     if st.session_state.last_normalized_command:
         st.text_area(
             "Normalized user input",
@@ -334,11 +345,12 @@ def _transcribe_new_audio(audio_file, digest_key: str, text_key: str, message_ke
         return
 
     with st.spinner("正在本机识别语音..."):
-        result = speech_to_text(audio_file)
+        result = speech_to_text(audio_file, tasks=load_tasks())
     st.session_state[digest_key] = audio_digest
     st.session_state[message_key] = result["message"]
     if result["success"]:
         st.session_state[text_key] = result["text"]
+        st.session_state.last_asr_result = result
 
 
 def _complete_voice_round(message: str) -> None:
@@ -382,6 +394,7 @@ def _reset_voice_round() -> None:
     st.session_state.command_text = ""
     st.session_state.command_audio_nonce += 1
     st.session_state.asr_message = ""
+    st.session_state.last_asr_result = None
     st.session_state.last_normalized_command = ""
     st.session_state.voice_reply = None
     st.session_state.system_response = build_welcome_message()

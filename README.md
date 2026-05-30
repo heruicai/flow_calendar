@@ -76,14 +76,25 @@ Flow:
 
 ```text
 Microphone/Text Input
--> voice_adapter
--> command_parser
+-> local ASR adapter
+-> dynamic task vocabulary context
+-> ASR postprocessor
+-> candidate reranker
+-> optional GLM parser or local rule parser
 -> dialog_manager confirmation
 -> task_store
 -> calendar_view
 -> response_generator / voice_adapter
 -> Text / Voice / Calendar Response
 ```
+
+Voice modules:
+
+- `src/asr_adapter.py`: lazy-loaded local ASR interface with Whisper, optional FunASR/SenseVoice, and mock adapters.
+- `src/voice_context_builder.py`: bounded dynamic vocabulary from local task titles and calendar-domain terms.
+- `src/asr_postprocessor.py`: OpenCC normalization plus context-supported similarity correction.
+- `src/asr_reranker.py`: ranks one or more ASR hypotheses using task, domain, time, and parser evidence.
+- `src/voice_pipeline.py`: orchestrates the local voice pipeline and records correction confidence.
 
 ## 8. Installation
 
@@ -106,6 +117,37 @@ streamlit run app.py --server.port 8501
 Do not install project dependencies into the system Python environment.
 
 Open the local URL shown by Streamlit and allow microphone access in the browser. For local development, browsers generally permit microphone access on `localhost`. The default local ASR model is `base`; set `FLOWCAL_WHISPER_MODEL=small` before launching Streamlit when a larger, more accurate local model is preferred.
+
+### Local voice pipeline configuration
+
+The default voice path is local and free: it does not upload audio or call a paid speech API. Settings are optional environment variables:
+
+```powershell
+$env:VOICE_ASR_ENGINE="whisper"
+$env:VOICE_ASR_MODEL="base"
+$env:VOICE_ASR_DEVICE="cpu"
+$env:VOICE_ASR_COMPUTE_TYPE="int8"
+$env:VOICE_ASR_LANGUAGE="zh"
+$env:VOICE_ASR_INITIAL_PROMPT=""
+$env:VOICE_ASR_HOTWORDS="kernelPCA,FlowCal"
+$env:VOICE_ENABLE_CONTEXT_BIAS="true"
+$env:VOICE_ENABLE_SEMANTIC_CORRECTION="true"
+$env:VOICE_ENABLE_CONFIRMATION="true"
+$env:VOICE_CORRECTION_THRESHOLD="0.85"
+$env:VOICE_CONFIRMATION_THRESHOLD="0.65"
+$env:VOICE_MAX_CONTEXT_TERMS="80"
+$env:VOICE_PRIVACY_MODE="local"
+```
+
+`VOICE_ASR_ENGINE=funasr` or `sensevoice` enables the optional local adapter when its package and model are installed. If that optional package is absent, FlowCal falls back to the existing local Whisper path. Models remain lazy-loaded, so importing the application does not download or initialize a large model.
+
+The old fixed typo map remains only as a compatibility fallback for a few recurring ASR mistakes. It is no longer the primary correction strategy. The postprocessor now builds vocabulary from local tasks, converts Traditional Chinese to Simplified Chinese, normalizes full-width text, compares contextual candidates, reranks ASR hypotheses, and flags uncertain corrections for confirmation. False corrections can still occur for short ambiguous phrases, unusual names not present in local context, and noisy recordings.
+
+Run the local text-side smoke test with:
+
+```powershell
+conda run -n flow_calendar python -m scripts.voice_pipeline_smoke_test
+```
 
 ## 9. Example Commands
 
@@ -146,6 +188,7 @@ Third-party dependencies:
 - `pyttsx3`: offline TTS generation; on Windows it uses the installed SAPI voices.
 - `openai`: OpenAI-compatible SDK used only by the optional GLM semantic parser.
 - `opencc-python-reimplemented`: local Traditional-to-Simplified Chinese conversion.
+- `pypinyin`: local pinyin similarity scoring for context-supported ASR corrections.
 
 No external voice API is used. No API key is required. Whisper model preparation requires network access only when the model is not already cached. Generated WAV files live under `outputs/audio/` and are ignored by Git.
 
