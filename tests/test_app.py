@@ -20,10 +20,9 @@ def test_main_uses_compact_two_column_layout_with_task_panels_on_left():
 
     assert "left, right = st.columns([1, 2.1], gap=\"medium\")" in source
     assert "left, center, right" not in source
-    assert source.index('with left:') < source.index('st.subheader("Flexible Task Pool")')
-    assert source.index('st.subheader("Flexible Task Pool")') < source.index('with right:')
-    assert source.index('st.subheader("Assistant Text Reply")') < source.index('with right:')
-    assert source.index('st.subheader("Assistant Voice Reply")') < source.index('with right:')
+    assert source.index('with left:') < source.index('with st.expander("Flexible Task Pool"')
+    assert source.index('with st.expander("Flexible Task Pool"') < source.index('with right:')
+    assert source.index('with st.expander("Assistant Reply"') < source.index('with right:')
 
 
 def test_task_action_specs_bind_unique_keys_to_each_task_id():
@@ -37,13 +36,16 @@ def test_task_action_specs_bind_unique_keys_to_each_task_id():
     assert ("postpone", "timeline_postpone_deadline-1") in first
 
 
-def test_completed_task_action_specs_only_offer_delete():
+def test_completed_task_action_specs_offer_undo_and_delete():
     actions = _task_action_specs(
         {"id": "done-1", "type": "essential_task", "status": "completed"},
         "timeline",
     )
 
-    assert actions == [("delete", "timeline_delete_done-1")]
+    assert actions == [
+        ("undo_complete", "timeline_undo_complete_done-1"),
+        ("delete", "timeline_delete_done-1"),
+    ]
 
 
 def test_task_action_click_targets_its_own_task_id(monkeypatch):
@@ -64,6 +66,30 @@ def test_task_action_click_targets_its_own_task_id(monkeypatch):
     )
 
     assert deleted_task_ids == ["deadline-2"]
+
+
+def test_undo_completed_click_targets_its_own_task_id(monkeypatch):
+    pending_task_ids = []
+
+    class FakeColumn:
+        def button(self, label, key, use_container_width):
+            return key == "timeline_undo_complete_done-2"
+
+    monkeypatch.setattr(app_module.st, "columns", lambda count: [FakeColumn() for _ in range(count)])
+    monkeypatch.setattr(
+        app_module,
+        "mark_task_pending",
+        lambda task_id: pending_task_ids.append(task_id) or {"title": "Laundry"},
+    )
+    monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+    monkeypatch.setattr(app_module.st, "rerun", lambda: None)
+
+    app_module._render_task_actions(
+        {"id": "done-2", "title": "Laundry", "type": "essential_task", "status": "completed"},
+        context="timeline",
+    )
+
+    assert pending_task_ids == ["done-2"]
 
 
 def test_confirmation_step_uses_buttons_without_second_voice_input():

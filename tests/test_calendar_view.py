@@ -30,9 +30,22 @@ def test_get_task_indicators_for_date_counts_types_and_completed():
 
     assert indicators["fixed_event"] == 1
     assert indicators["deadline_task"] == 1
-    assert indicators["essential_task"] == 1
+    assert indicators["essential_task"] == 0
     assert indicators["flexible_plan"] == 0
     assert indicators["completed"] == 1
+
+
+def test_completed_essential_tasks_move_from_pending_to_gray_indicator():
+    tasks = [
+        {"id": "1", "type": "essential_task", "date": "2026-05-30", "status": "completed"},
+        {"id": "2", "type": "essential_task", "date": "2026-05-30", "status": "completed"},
+        {"id": "3", "type": "essential_task", "date": "2026-05-30", "status": "completed"},
+    ]
+
+    indicators = get_task_indicators_for_date(tasks, "2026-05-30")
+
+    assert indicators["essential_task"] == 0
+    assert indicators["completed"] == 3
 
 
 def test_fixed_event_uses_start_and_end_time_in_day_timeline():

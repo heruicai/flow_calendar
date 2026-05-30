@@ -22,7 +22,7 @@ from src.dialog_manager import (
     create_pending_action,
 )
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
-from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_postponed
+from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_pending, mark_task_postponed
 from src.voice_adapter import (
     build_spoken_response,
     get_voice_input_mode_description,
@@ -53,12 +53,13 @@ def main() -> None:
 
     with left:
         _render_voice_conversation()
-        st.subheader("Assistant Text Reply")
-        st.info(st.session_state.system_response)
-        st.subheader("Assistant Voice Reply")
-        _render_voice_reply("final_response")
-        st.subheader("Flexible Task Pool")
-        _render_flexible_pool(tasks)
+        with st.expander("Assistant Reply", expanded=True):
+            st.markdown("##### Text")
+            st.info(st.session_state.system_response)
+            st.markdown("##### Voice")
+            _render_voice_reply("final_response")
+        with st.expander("Flexible Task Pool", expanded=False):
+            _render_flexible_pool(tasks)
 
     with right:
         _render_month_and_day_views(tasks)
@@ -70,13 +71,25 @@ def _render_page_styles() -> None:
         <style>
         .block-container {
             max-width: 1680px;
-            padding-top: 1.5rem;
+            padding-top: 0.65rem;
             padding-left: 2rem;
             padding-right: 2rem;
+            padding-bottom: 1rem;
+        }
+        h1 {
+            font-size: 1.8rem !important;
+            margin-bottom: 0 !important;
+        }
+        h2, h3, h4, h5 {
+            margin-top: 0.35rem !important;
+            margin-bottom: 0.2rem !important;
+        }
+        div[data-testid="stVerticalBlock"] {
+            gap: 0.35rem;
         }
         div[data-testid="stButton"] button {
-            min-height: 2rem;
-            padding: 0.25rem 0.5rem;
+            min-height: 1.65rem;
+            padding: 0.1rem 0.45rem;
         }
         </style>
         """,
@@ -107,8 +120,9 @@ def _init_session_state() -> None:
 
 def _render_voice_conversation() -> None:
     st.subheader("Voice Conversation")
-    st.caption("主流程：录音指令 -> 本地转写 -> 语音提示 -> 按钮确认 -> 执行 -> 语音回复")
-    st.caption(get_voice_input_mode_description())
+    st.caption("Record a command, review the text, then parse it.")
+    with st.expander("Voice input details", expanded=False):
+        st.caption(get_voice_input_mode_description())
 
     state = st.session_state.dialog_state
     if state == "idle":
@@ -158,7 +172,7 @@ def _render_voice_command_step() -> None:
         "ASR text (editable)",
         key="command_text",
         placeholder="录音转写结果会显示在这里，也可以手动修正。",
-        height=90,
+        height=68,
     )
     if st.button(
         "Continue / Parse",
@@ -385,6 +399,8 @@ def _task_action_specs(task: dict, context: str) -> list[tuple[str, str]]:
     actions = []
     if task.get("status") != "completed":
         actions.append(("complete", f"{context}_complete_{task_id}"))
+    else:
+        actions.append(("undo_complete", f"{context}_undo_complete_{task_id}"))
     actions.append(("delete", f"{context}_delete_{task_id}"))
     if task.get("status") != "completed" and task.get("type") in {
         "deadline_task",
@@ -412,6 +428,14 @@ def _render_task_actions(task: dict, context: str) -> None:
     ):
         updated = mark_task_completed(task_id)
         _complete_voice_round(f"已将{updated['title']}标记为完成。")
+        st.rerun()
+    if "undo_complete" in controls and controls["undo_complete"][0].button(
+        "Undo completed",
+        key=controls["undo_complete"][1],
+        use_container_width=True,
+    ):
+        updated = mark_task_pending(task_id)
+        _complete_voice_round(f"已取消完成：{updated['title']}。")
         st.rerun()
     if controls["delete"][0].button("Delete", key=controls["delete"][1], use_container_width=True):
         delete_task(task_id)

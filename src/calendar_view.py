@@ -90,7 +90,7 @@ def get_task_indicators_for_date(tasks: list, date: str) -> dict:
     for task in tasks:
         task_type = task.get("type")
         appears_on_date = _task_appears_on_date(task, date)
-        if appears_on_date and task_type in indicators:
+        if appears_on_date and task_type in indicators and task.get("status") != "completed":
             indicators[task_type] += 1
         if appears_on_date and task.get("status") == "completed":
             indicators["completed"] += 1
@@ -352,12 +352,12 @@ def _render_calendar_styles() -> None:
         """
         <style>
         .flowcal-month-cell {
-            min-height: 84px;
+            min-height: 62px;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
-            padding: 6px;
+            padding: 4px 5px;
             background: #ffffff;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .flowcal-month-cell-selected {
             border: 2px solid #111827;
@@ -369,17 +369,17 @@ def _render_calendar_styles() -> None:
         .flowcal-month-day {
             font-weight: 700;
             color: #111827;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         .flowcal-month-chips {
             display: flex;
             flex-wrap: wrap;
-            gap: 4px;
+            gap: 3px;
         }
         .flowcal-month-chips span {
             color: #ffffff;
             border-radius: 999px;
-            padding: 2px 6px;
+            padding: 1px 5px;
             font-size: 12px;
             line-height: 1.4;
         }
@@ -392,14 +392,14 @@ def _render_calendar_styles() -> None:
             border: 1px solid var(--border);
             border-left-width: 5px;
             border-radius: 8px;
-            padding: 8px 10px;
-            margin-bottom: 6px;
+            padding: 6px 8px;
+            margin-bottom: 3px;
             background: var(--background);
         }
         .flowcal-card-title {
             font-weight: 650;
             color: #111827;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .flowcal-card-meta {
             color: #4b5563;

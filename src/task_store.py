@@ -204,6 +204,18 @@ def mark_task_completed(task_id: str, path: str | None = None) -> dict | None:
     )
 
 
+def mark_task_pending(task_id: str, path: str | None = None) -> dict | None:
+    """Undo task completion and return the task to its pending state."""
+    return update_task(
+        task_id,
+        {
+            "status": "pending",
+            "completed_at": None,
+        },
+        path,
+    )
+
+
 def mark_task_postponed(
     task_id: str,
     new_date: str,
