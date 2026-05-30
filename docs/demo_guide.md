@@ -2,73 +2,51 @@
 
 This guide is written for a 2-4 minute competition demo video.
 
-## Demo Video
-
-Demo video: To be updated.
-
 ## Setup
 
 ```powershell
-conda activate flow_calendar
-streamlit run app.py
+conda run -n flow_calendar streamlit run app.py --server.port 8501 --server.headless true
 ```
 
-Open the local Streamlit page in the browser.
+Open the local Streamlit page and allow browser microphone access. Prepare the Whisper model before recording the final demo so the first download does not interrupt the video.
 
-## Script
+## Real Voice Demo Script
 
-1. Introduce FlowCal.
-   - "FlowCal is a voice-driven visual calendar tool. It lets users manage schedules through voice-like commands or text, then returns text, voice-reply text, and calendar visualization."
+1. Introduce FlowCal as a voice-first calendar tool with local speech recognition and local speech output.
 
-2. Show the page layout.
-   - Left: Voice / Text Command.
-   - Center: Calendar View.
-   - Right: Task Panels and System Response.
+2. Add a fixed event.
+   - Click the first recording control.
+   - Say: `明天下午三点到四点参加算法面试`
+   - Show the editable ASR transcription and click `Continue / Parse`.
+   - Let FlowCal speak the confirmation prompt.
+   - Record a second answer: `确认`
+   - Submit the confirmation and hear: `已添加算法面试。`
+   - Show the new calendar task.
 
-3. Select `Simulated voice input`.
-   - Explain that the current version treats typed text as speech-to-text output.
-   - Mention that real ASR can be connected later through `voice_adapter.py`.
+3. Add an essential task.
+   - Start a new voice command.
+   - Say: `今天必须洗衣服`
+   - Confirm by voice.
+   - Show the green `essential_task` bar.
 
-4. Add a fixed event.
-   - Input: `明天下午三点到四点参加算法面试`
-   - Show the blue `fixed_event` block in the calendar view.
+4. Query tomorrow's schedule.
+   - Start a new voice command.
+   - Say: `我明天有什么安排`
+   - Show that a query does not require confirmation.
+   - Hear the spoken schedule summary.
 
-5. Add a deadline task.
-   - Input: `周五前完成报告，预计三小时`
-   - Show the orange Deadline Timeline card.
-   - Point out deadline, estimated duration, and latest start time.
+5. Complete laundry.
+   - Start a new voice command.
+   - Say: `洗衣服完成了`
+   - Confirm by voice.
+   - Show that the completed task turns gray.
 
-6. Add an essential task.
-   - Input: `今天必须洗衣服`
-   - Show the green essential task card/bar.
-
-7. Add a flexible plan.
-   - Input: `添加弹性任务，刷两道 LeetCode`
-   - Show the Flexible Task Pool.
-   - Explain that flexible plans do not automatically occupy the calendar.
-
-8. Query schedule.
-   - Input: `我明天有什么安排`
-   - Show that the selected date changes and the system response summarizes the schedule.
-
-9. Mark a task completed.
-   - Use `洗衣服完成了` or click `Mark completed`.
-   - Show the completed task turning gray.
-
-10. Generate a voice reply.
-    - Click `Generate voice reply`.
-    - Show the Spoken Response / Voice Reply text.
-    - Explain that this is mock TTS now and can be extended later.
-
-11. Summarize original design highlights.
-    - Four task categories with different visual expressions.
-    - Local JSON task storage.
-    - Rule-based voice/text command parser.
-    - Streamlit three-column interaction.
-    - Voice adapter with future ASR/TTS extension points.
+6. Mention the fallback.
+   - Open `Text Command fallback`.
+   - Explain that typed commands remain available when a microphone is unavailable.
 
 ## Notes
 
-- Do not show real private schedules.
-- Do not include API keys or `.env` files.
+- Recordings are transcribed locally and are not uploaded to an external speech service.
+- Generated WAV replies are runtime files under `outputs/audio/` and must not be committed.
 - Use only fictional demo tasks.

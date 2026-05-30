@@ -64,7 +64,7 @@ CHINESE_NUMBERS = {
 
 
 def parse_command(text: str, now: datetime | None = None) -> dict:
-    """Parse one FlowCal command from typed text or simulated ASR output."""
+    """Parse one FlowCal command from typed text or local ASR output."""
     current_time = now or datetime.now()
     command = text.strip()
     intent = _detect_intent(command)

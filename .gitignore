@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *.pyo
 .pytest_cache/
 .mypy_cache/
@@ -18,6 +19,11 @@ env/
 
 # Runtime data
 data/tasks.json
+outputs/
+outputs/audio/
+*.wav
+*.mp3
+*.m4a
 
 # OS and editor files
 .DS_Store

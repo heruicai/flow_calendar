@@ -1,6 +1,6 @@
 # FlowCal Architecture
 
-FlowCal is a local-first Streamlit application for voice-driven visual calendar management. Its core idea is that voice/text commands and visual calendar feedback should work together: the user can speak or type naturally, while the system responds with text, voice-reply text, and task visualization.
+FlowCal is a local-first Streamlit application for voice-driven visual calendar management. Its core idea is that voice/text commands and visual calendar feedback should work together: the user can speak or type naturally, while the system responds with text, local speech audio, and task visualization.
 
 ## Module Responsibilities
 
@@ -16,14 +16,18 @@ It coordinates parser results with storage actions such as add, query, complete,
 
 ## `src/voice_adapter.py`
 
-The voice adapter normalizes simulated speech-to-text input before parsing. It also reserves stable ASR and TTS interfaces:
+The voice adapter normalizes speech-to-text input before parsing and owns the local ASR/TTS interfaces:
 
-- `normalize_voice_text(text)`: cleans typed or simulated voice text.
-- `speech_to_text(audio_file=None)`: future ASR entry point.
+- `normalize_voice_text(text)`: cleans typed or locally transcribed voice text.
+- `speech_to_text(audio_file=None)`: transcribes `st.audio_input` recordings locally with `faster-whisper`.
 - `build_spoken_response(response_text)`: prepares a short spoken response.
-- `text_to_speech(response_text)`: mock TTS result for the current version.
+- `text_to_speech(response_text)`: generates a local WAV file with `pyttsx3`.
 
-Text input and simulated voice input both pass through this adapter before entering the parser, so future voice recognition can reuse the same downstream logic.
+Text input and microphone transcription both pass through the same parser. Generated audio lives under the Git-ignored `outputs/audio/` runtime directory.
+
+## `src/dialog_manager.py`
+
+The dialog manager holds mutation confirmation rules. Add, delete, and completion actions become pending actions until the user says `确认`; `取消` ends the round without changing storage. Schedule queries bypass confirmation.
 
 ## `src/command_parser.py`
 
@@ -67,9 +71,10 @@ The response generator creates short system responses and schedule summaries. Th
 ## Data Flow
 
 ```text
-Voice/Text Input
+Microphone/Text Input
 -> voice_adapter.normalize_voice_text
 -> command_parser.parse_command
+-> dialog_manager confirmation
 -> task_store add/update/delete/query
 -> calendar_view group/style/render
 -> response_generator text response
@@ -81,12 +86,11 @@ Voice/Text Input
 
 Both input modes use the same parser:
 
-1. `Text input`: typed command is normalized.
-2. `Simulated voice input`: typed text is treated as ASR output and normalized.
+1. `Microphone input`: `st.audio_input` captures a recording and `faster-whisper` transcribes it locally.
+2. `Text fallback`: typed text is normalized directly.
 3. Normalized text is sent to `parse_command`.
-4. Parser output drives task storage and UI feedback.
-
-This design keeps the current demo stable while preserving a clean extension point for Whisper, browser speech recognition, or another ASR system.
+4. Mutation commands wait for a second microphone confirmation round before storage changes.
+5. `pyttsx3` generates spoken confirmation prompts and final results.
 
 ## Local JSON Storage And View State
 
@@ -102,4 +106,4 @@ The UI reads all tasks from `data/tasks.json` and groups them for the selected d
 
 ## Safety And Privacy
 
-FlowCal does not require `.env`, API keys, or real private schedule data. Runtime data in `data/tasks.json` is ignored by Git. Demo examples use fictional tasks only.
+FlowCal does not require `.env`, API keys, or real private schedule data. Runtime data in `data/tasks.json` and generated audio under `outputs/` are ignored by Git. Recorded audio is transcribed locally and not uploaded to an external service. Demo examples use fictional tasks only.
