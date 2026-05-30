@@ -13,6 +13,8 @@ def test_page_has_one_primary_voice_input_area():
     assert len(app.exception) == 0
     assert len(app.get("audio_input")) == 1
     assert "Demo examples" in [expander.label for expander in app.expander]
+    assert "Flexible Task Pool" not in [expander.label for expander in app.expander]
+    assert any(subheader.value == "Flexible Task Pool" for subheader in app.subheader)
 
 
 def test_main_uses_compact_two_column_layout_with_task_panels_on_left():
@@ -20,8 +22,9 @@ def test_main_uses_compact_two_column_layout_with_task_panels_on_left():
 
     assert "left, right = st.columns([1, 2.1], gap=\"medium\")" in source
     assert "left, center, right" not in source
-    assert source.index('with left:') < source.index('with st.expander("Flexible Task Pool"')
-    assert source.index('with st.expander("Flexible Task Pool"') < source.index('with right:')
+    assert source.index('with left:') < source.index('st.subheader("Flexible Task Pool")')
+    assert source.index('st.subheader("Flexible Task Pool")') < source.index('with right:')
+    assert 'st.expander("Flexible Task Pool"' not in source
     assert source.index('with st.expander("Assistant Reply"') < source.index('with right:')
 
 

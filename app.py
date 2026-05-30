@@ -58,8 +58,8 @@ def main() -> None:
             st.info(st.session_state.system_response)
             st.markdown("##### Voice")
             _render_voice_reply("final_response")
-        with st.expander("Flexible Task Pool", expanded=False):
-            _render_flexible_pool(tasks)
+        st.subheader("Flexible Task Pool")
+        _render_flexible_pool(tasks)
 
     with right:
         _render_month_and_day_views(tasks)
