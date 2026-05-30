@@ -244,6 +244,10 @@ def _handle_command(command: str) -> None:
             _complete_voice_round(build_schedule_summary(load_tasks(), query_date))
         return
 
+    if intent == "update_event":
+        _complete_voice_round(build_parse_response(parsed))
+        return
+
     if intent in {"mark_completed", "delete_event"}:
         task = _find_single_matching_task(parsed)
         if not task:

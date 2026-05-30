@@ -44,3 +44,15 @@ def test_speech_to_text_without_audio_returns_controlled_error():
     assert result["mode"] == "fallback"
     assert result["text"] == ""
     assert result["message"]
+
+
+def test_normalize_voice_text_converts_common_traditional_chinese():
+    normalized = normalize_voice_text("請確認這個語音任務，標記會議結束")
+
+    assert normalized == "请确认这个语音任务，标记会议结束"
+
+
+def test_spoken_response_uses_simplified_chinese():
+    spoken = build_spoken_response("請確認語音任務，標記會議結束")
+
+    assert spoken == "请确认语音任务，标记会议结束"
