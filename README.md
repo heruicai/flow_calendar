@@ -41,10 +41,10 @@ FlowCal uses a push-to-talk voice conversation as the primary flow:
 
 1. The browser records microphone audio through Streamlit `st.audio_input`.
 2. `faster-whisper` transcribes the recording locally. The transcription remains editable before parsing.
-3. Add, delete, and completion commands produce a spoken confirmation question.
-4. The user records a second short answer: `确认` or `取消`.
+3. Add, delete, and completion commands produce a spoken and written confirmation question.
+4. The user clicks the matching confirmation button or `取消本次操作`. This avoids a second ASR round causing an accidental mutation.
 5. Confirmed changes are written to the local task store and the final result is spoken aloud.
-6. Schedule queries return a spoken result immediately without a confirmation round.
+6. Schedule queries return concrete task details immediately in text and speech without a confirmation round.
 
 `pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The first ASR run downloads the selected Whisper model if it is not already cached; after that, transcription runs locally. Text command input remains available as a fallback.
 
@@ -131,6 +131,7 @@ Planned demo content:
 - Query schedule.
 - Mark a task completed and show the gray completed style.
 - Hear spoken confirmation and final replies.
+- Confirm mutations with buttons after the spoken prompt.
 
 ## 11. Dependencies
 

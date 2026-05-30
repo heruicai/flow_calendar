@@ -21,7 +21,6 @@ from src.dialog_manager import (
     build_confirmation_prompt,
     cancel_pending_action,
     create_pending_action,
-    parse_confirmation_text,
 )
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
 from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_postponed
@@ -80,13 +79,9 @@ def _init_session_state() -> None:
         "dialog_state": "idle",
         "pending_action": None,
         "command_audio_digest": "",
-        "confirmation_audio_digest": "",
         "command_text": "",
-        "confirmation_text": "",
         "command_audio_nonce": 0,
-        "confirmation_audio_nonce": 0,
         "asr_message": "",
-        "confirmation_asr_message": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -94,7 +89,7 @@ def _init_session_state() -> None:
 
 def _render_voice_conversation() -> None:
     st.subheader("Voice Conversation")
-    st.caption("主流程：录音指令 -> 本地转写 -> 语音确认 -> 执行 -> 语音回复")
+    st.caption("主流程：录音指令 -> 本地转写 -> 语音提示 -> 按钮确认 -> 执行 -> 语音回复")
     st.caption(get_voice_input_mode_description())
 
     state = st.session_state.dialog_state
@@ -165,32 +160,21 @@ def _render_confirmation_step() -> None:
     st.markdown("##### Assistant Voice Reply")
     _render_voice_reply("confirmation_prompt")
 
-    audio_file = st.audio_input(
-        "再次点击录音，请说“确认”或“取消”",
-        key=f"confirmation_audio_{st.session_state.confirmation_audio_nonce}",
-    )
-    if audio_file is not None:
-        _transcribe_new_audio(
-            audio_file,
-            digest_key="confirmation_audio_digest",
-            text_key="confirmation_text",
-            message_key="confirmation_asr_message",
-        )
-
-    if st.session_state.confirmation_asr_message:
-        st.caption(st.session_state.confirmation_asr_message)
-    confirmation_text = st.text_input(
-        "Confirmation ASR text (editable)",
-        key="confirmation_text",
-        placeholder="确认 / 取消",
-    )
-    if st.button(
-        "Submit confirmation",
-        key="submit_voice_confirmation",
+    columns = st.columns(2)
+    if columns[0].button(
+        _confirmation_button_label(st.session_state.pending_action),
+        key="confirm_pending_action",
         type="primary",
         use_container_width=True,
     ):
-        _handle_confirmation(confirmation_text)
+        _handle_confirmation_button()
+        st.rerun()
+    if columns[1].button(
+        "取消本次操作",
+        key="cancel_pending_action",
+        use_container_width=True,
+    ):
+        _handle_cancel_button()
         st.rerun()
 
 
@@ -226,21 +210,26 @@ def _handle_command(command: str) -> None:
     _set_system_response(build_confirmation_prompt(pending_action), speak=True)
 
 
-def _handle_confirmation(text: str) -> None:
-    decision = parse_confirmation_text(text)
-    if decision == "unknown":
-        _set_system_response("我没有听清。请说确认或取消。", speak=True)
-        return
-
-    if decision == "cancel":
-        result = cancel_pending_action()
-    else:
-        result = apply_confirmed_action(st.session_state.pending_action or {})
-        task = result.get("task") or {}
-        if result["success"] and task.get("date"):
-            _set_selected_date(task["date"])
-
+def _handle_confirmation_button() -> None:
+    result = apply_confirmed_action(st.session_state.pending_action or {})
+    task = result.get("task") or {}
+    if result["success"] and task.get("date"):
+        _set_selected_date(task["date"])
     _complete_voice_round(result["response_text"])
+
+
+def _handle_cancel_button() -> None:
+    result = cancel_pending_action()
+    _complete_voice_round(result["response_text"])
+
+
+def _confirmation_button_label(pending_action: dict | None) -> str:
+    intent = (pending_action or {}).get("intent")
+    return {
+        "add_event": "确认添加",
+        "delete_event": "确认删除",
+        "mark_completed": "确认完成",
+    }.get(intent, "确认操作")
 
 
 def _find_single_matching_task(parsed: dict) -> dict | None:
@@ -309,13 +298,9 @@ def _reset_voice_round() -> None:
     st.session_state.dialog_state = "idle"
     st.session_state.pending_action = None
     st.session_state.command_audio_digest = ""
-    st.session_state.confirmation_audio_digest = ""
     st.session_state.command_text = ""
-    st.session_state.confirmation_text = ""
     st.session_state.command_audio_nonce += 1
-    st.session_state.confirmation_audio_nonce += 1
     st.session_state.asr_message = ""
-    st.session_state.confirmation_asr_message = ""
     st.session_state.voice_reply = None
     st.session_state.system_response = build_welcome_message()
 

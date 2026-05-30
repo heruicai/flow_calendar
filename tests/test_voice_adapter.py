@@ -10,7 +10,7 @@ def test_normalize_voice_text_handles_spaces_punctuation_and_fillers():
     assert normalized == "明天下午三点，复习"
 
 
-def test_build_spoken_response_removes_markdown_and_truncates():
+def test_build_spoken_response_removes_markdown_without_truncating_details():
     response = "## Result\n**Added** task: `算法面试` " + "very long " * 30
 
     spoken = build_spoken_response(response)
@@ -19,7 +19,8 @@ def test_build_spoken_response_removes_markdown_and_truncates():
     assert "*" not in spoken
     assert "`" not in spoken
     assert "Added" in spoken
-    assert len(spoken) <= 140
+    assert "very long" in spoken
+    assert not spoken.endswith("...")
 
 
 def test_text_to_speech_returns_controlled_error_when_tts_is_unavailable(monkeypatch):

@@ -19,26 +19,25 @@ Open the local Streamlit page and allow browser microphone access. Prepare the W
    - Say: `明天下午三点到四点参加算法面试`
    - Show the editable ASR transcription and click `Continue / Parse`.
    - Let FlowCal speak the confirmation prompt.
-   - Record a second answer: `确认`
-   - Submit the confirmation and hear: `已添加算法面试。`
+   - Click `确认添加` and hear: `已添加算法面试。`
    - Show the new calendar task.
 
 3. Add an essential task.
    - Start a new voice command.
    - Say: `今天必须洗衣服`
-   - Confirm by voice.
+   - Click `确认添加`.
    - Show the green `essential_task` bar.
 
 4. Query tomorrow's schedule.
    - Start a new voice command.
    - Say: `我明天有什么安排`
    - Show that a query does not require confirmation.
-   - Hear the spoken schedule summary.
+   - Hear the detailed spoken schedule summary and show the same readable text.
 
 5. Complete laundry.
    - Start a new voice command.
    - Say: `洗衣服完成了`
-   - Confirm by voice.
+   - Click `确认完成`.
    - Show that the completed task turns gray.
 
 6. Mention the fallback.
@@ -48,5 +47,6 @@ Open the local Streamlit page and allow browser microphone access. Prepare the W
 ## Notes
 
 - Recordings are transcribed locally and are not uploaded to an external speech service.
+- Push-to-talk records only the calendar command. Mutation confirmation uses buttons to avoid ASR mistakes.
 - Generated WAV replies are runtime files under `outputs/audio/` and must not be committed.
 - Use only fictional demo tasks.

@@ -27,7 +27,7 @@ Text input and microphone transcription both pass through the same parser. Gener
 
 ## `src/dialog_manager.py`
 
-The dialog manager holds mutation confirmation rules. Add, delete, and completion actions become pending actions until the user says `确认`; `取消` ends the round without changing storage. Schedule queries bypass confirmation.
+The dialog manager holds mutation confirmation rules. Add, delete, and completion actions become pending actions until the user clicks the matching confirmation button; cancellation ends the round without changing storage. Schedule queries bypass confirmation.
 
 ## `src/command_parser.py`
 
@@ -89,7 +89,7 @@ Both input modes use the same parser:
 1. `Microphone input`: `st.audio_input` captures a recording and `faster-whisper` transcribes it locally.
 2. `Text fallback`: typed text is normalized directly.
 3. Normalized text is sent to `parse_command`.
-4. Mutation commands wait for a second microphone confirmation round before storage changes.
+4. Mutation commands wait for a button confirmation before storage changes.
 5. `pyttsx3` generates spoken confirmation prompts and final results.
 
 ## Local JSON Storage And View State
