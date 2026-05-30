@@ -21,6 +21,7 @@ FlowCal is designed for users who manage plans under real time pressure:
 - Delete tasks.
 - Query schedule.
 - Mark tasks completed.
+- Undo completed tasks from their task cards.
 - Offline voice confirmation and final response.
 - Visual calendar view.
 - Local JSON task storage.
@@ -62,7 +63,7 @@ FlowCal uses visual rules to match task intent:
 
 Main modules:
 
-- `app.py`: Streamlit entry point, three-column layout, command execution, and UI actions.
+- `app.py`: Streamlit entry point, compact two-column layout, command execution, and UI actions.
 - `src/task_store.py`: JSON-backed local persistence for tasks and completion state.
 - `src/command_parser.py`: rule-based natural-language command parser.
 - `src/calendar_view.py`: task grouping, style mapping, and visual calendar rendering helpers.
@@ -130,6 +131,7 @@ Planned demo content:
 - Add a `flexible_plan`.
 - Query schedule.
 - Mark a task completed and show the gray completed style.
+- Use task-specific timeline buttons directly below each card.
 - Hear spoken confirmation and final replies.
 - Confirm mutations with buttons after the spoken prompt.
 
@@ -153,7 +155,7 @@ Original FlowCal work includes:
 - Voice/text command parsing rules.
 - Calendar visualization design.
 - Voice interaction adapter layer.
-- Streamlit three-column interaction page.
+- Streamlit two-column interaction page with a left conversation panel and a calendar-focused main panel.
 - Test cases for storage, parser, calendar view, and voice adapter.
 
 The core implementation was developed for this project. No previous personal project code was reused.

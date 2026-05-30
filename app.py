@@ -9,7 +9,6 @@ from pathlib import Path
 import streamlit as st
 
 from src.calendar_view import (
-    build_day_timeline,
     group_tasks_for_view,
     render_day_timeline,
     render_month_calendar,
@@ -23,7 +22,7 @@ from src.dialog_manager import (
     create_pending_action,
 )
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
-from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_postponed
+from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_pending, mark_task_postponed
 from src.voice_adapter import (
     build_spoken_response,
     get_voice_input_mode_description,
@@ -44,26 +43,61 @@ SAMPLE_COMMANDS = [
 def main() -> None:
     st.set_page_config(page_title="FlowCal", page_icon="F", layout="wide")
     _init_session_state()
+    _render_page_styles()
 
     st.title("FlowCal")
     st.caption("Voice-first visual calendar assistant")
 
     tasks = load_tasks()
-    left, center, right = st.columns([1.2, 2.2, 1.15], gap="large")
+    left, right = st.columns([1, 2.1], gap="medium")
 
     with left:
         _render_voice_conversation()
-
-    with center:
-        _render_month_and_day_views(tasks)
-
-    with right:
+        with st.expander("Assistant Reply", expanded=True):
+            st.markdown("##### Text")
+            st.info(st.session_state.system_response)
+            st.markdown("##### Voice")
+            _render_voice_reply("final_response")
         st.subheader("Flexible Task Pool")
         _render_flexible_pool(tasks)
-        st.subheader("Assistant Text Reply")
-        st.info(st.session_state.system_response)
-        st.subheader("Assistant Voice Reply")
-        _render_voice_reply("final_response")
+
+    with right:
+        _render_month_and_day_views(tasks)
+
+
+def _render_page_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            max-width: 1680px;
+            padding-top: 0.9rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+            padding-bottom: 1rem;
+        }
+        h1 {
+            font-size: 1.8rem !important;
+            line-height: 1.25 !important;
+            padding-top: 0.1rem !important;
+            margin-bottom: 0 !important;
+            overflow: visible !important;
+        }
+        h2, h3, h4, h5 {
+            margin-top: 0.35rem !important;
+            margin-bottom: 0.2rem !important;
+        }
+        div[data-testid="stVerticalBlock"] {
+            gap: 0.35rem;
+        }
+        div[data-testid="stButton"] button {
+            min-height: 1.65rem;
+            padding: 0.1rem 0.45rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _init_session_state() -> None:
@@ -89,8 +123,9 @@ def _init_session_state() -> None:
 
 def _render_voice_conversation() -> None:
     st.subheader("Voice Conversation")
-    st.caption("主流程：录音指令 -> 本地转写 -> 语音提示 -> 按钮确认 -> 执行 -> 语音回复")
-    st.caption(get_voice_input_mode_description())
+    st.caption("Record a command, review the text, then parse it.")
+    with st.expander("Voice input details", expanded=False):
+        st.caption(get_voice_input_mode_description())
 
     state = st.session_state.dialog_state
     if state == "idle":
@@ -115,9 +150,9 @@ def _render_voice_conversation() -> None:
             _handle_command(typed_command)
             st.rerun()
 
-    st.markdown("**Demo examples**")
-    for sample in SAMPLE_COMMANDS:
-        st.code(sample, language=None)
+    with st.expander("Demo examples", expanded=False):
+        for sample in SAMPLE_COMMANDS:
+            st.code(sample, language=None)
 
 
 def _render_voice_command_step() -> None:
@@ -140,7 +175,7 @@ def _render_voice_command_step() -> None:
         "ASR text (editable)",
         key="command_text",
         placeholder="录音转写结果会显示在这里，也可以手动修正。",
-        height=90,
+        height=68,
     )
     if st.button(
         "Continue / Parse",
@@ -331,8 +366,11 @@ def _render_month_and_day_views(tasks: list[dict]) -> None:
         st.rerun()
 
     st.divider()
-    render_day_timeline(tasks, st.session_state.selected_date)
-    _render_day_timeline_actions(tasks, st.session_state.selected_date)
+    render_day_timeline(
+        tasks,
+        st.session_state.selected_date,
+        action_renderer=lambda task: _render_task_actions(task, context="timeline"),
+    )
 
 
 def _find_matching_tasks(tasks: list[dict], keyword: str, query_date: str | None = None) -> list[dict]:
@@ -347,38 +385,70 @@ def _find_matching_tasks(tasks: list[dict], keyword: str, query_date: str | None
     return matches
 
 
-def _render_day_timeline_actions(tasks: list[dict], selected_date: str) -> None:
-    entries = build_day_timeline(tasks, selected_date)
-    if entries:
-        st.markdown("#### Day Actions")
-    for entry in entries:
-        task = entry["task"]
-        _render_task_actions(task, allow_postpone=task.get("type") == "essential_task")
-
-
 def _render_flexible_pool(tasks: list[dict]) -> None:
     groups = group_tasks_for_view(tasks, st.session_state.selected_date)
     if not groups["todo_pool"]:
         st.caption("No flexible plans yet.")
     for task in groups["todo_pool"]:
         st.markdown(render_task_card_html(task), unsafe_allow_html=True)
-        _render_task_actions(task, allow_postpone=True)
+        _render_task_actions(task, context="pool")
 
 
-def _render_task_actions(task: dict, allow_postpone: bool) -> None:
+def _task_action_specs(task: dict, context: str) -> list[tuple[str, str]]:
+    task_id = task.get("id")
+    if not task_id:
+        return []
+
+    actions = []
+    if task.get("status") != "completed":
+        actions.append(("complete", f"{context}_complete_{task_id}"))
+    else:
+        actions.append(("undo_complete", f"{context}_undo_complete_{task_id}"))
+    actions.append(("delete", f"{context}_delete_{task_id}"))
+    if task.get("status") != "completed" and task.get("type") in {
+        "deadline_task",
+        "essential_task",
+        "flexible_plan",
+    }:
+        actions.append(("postpone", f"{context}_postpone_{task_id}"))
+    return actions
+
+
+def _render_task_actions(task: dict, context: str) -> None:
     task_id = task.get("id")
     if not task_id:
         return
-    columns = st.columns(3 if allow_postpone else 2)
-    if columns[0].button("Mark completed", key=f"complete_{task_id}", use_container_width=True):
+    action_specs = _task_action_specs(task, context)
+    columns = st.columns(len(action_specs))
+    controls = {
+        action: (column, key)
+        for column, (action, key) in zip(columns, action_specs)
+    }
+    if "complete" in controls and controls["complete"][0].button(
+        "Mark completed",
+        key=controls["complete"][1],
+        use_container_width=True,
+    ):
         updated = mark_task_completed(task_id)
         _complete_voice_round(f"已将{updated['title']}标记为完成。")
         st.rerun()
-    if columns[1].button("Delete", key=f"delete_{task_id}", use_container_width=True):
+    if "undo_complete" in controls and controls["undo_complete"][0].button(
+        "Undo completed",
+        key=controls["undo_complete"][1],
+        use_container_width=True,
+    ):
+        updated = mark_task_pending(task_id)
+        _complete_voice_round(f"已取消完成：{updated['title']}。")
+        st.rerun()
+    if controls["delete"][0].button("Delete", key=controls["delete"][1], use_container_width=True):
         delete_task(task_id)
         _complete_voice_round(f"已删除{task.get('title', '任务')}。")
         st.rerun()
-    if allow_postpone and columns[2].button("Postpone", key=f"postpone_{task_id}", use_container_width=True):
+    if "postpone" in controls and controls["postpone"][0].button(
+        "Postpone",
+        key=controls["postpone"][1],
+        use_container_width=True,
+    ):
         new_date = _next_task_date(task)
         updated = mark_task_postponed(task_id, new_date)
         _complete_voice_round(f"已将{updated['title']}推迟到{new_date}。")

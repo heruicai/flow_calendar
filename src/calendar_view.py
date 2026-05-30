@@ -5,6 +5,7 @@ from __future__ import annotations
 import calendar
 from datetime import date, datetime
 from html import escape
+from typing import Callable
 
 import streamlit as st
 
@@ -89,7 +90,7 @@ def get_task_indicators_for_date(tasks: list, date: str) -> dict:
     for task in tasks:
         task_type = task.get("type")
         appears_on_date = _task_appears_on_date(task, date)
-        if appears_on_date and task_type in indicators:
+        if appears_on_date and task_type in indicators and task.get("status") != "completed":
             indicators[task_type] += 1
         if appears_on_date and task.get("status") == "completed":
             indicators["completed"] += 1
@@ -202,7 +203,11 @@ def render_month_calendar(
     return clicked_date
 
 
-def render_day_timeline(tasks: list, selected_date: str) -> None:
+def render_day_timeline(
+    tasks: list,
+    selected_date: str,
+    action_renderer: Callable[[dict], None] | None = None,
+) -> None:
     """Render the selected day's fixed, deadline, and essential timeline."""
     _render_calendar_styles()
     entries = build_day_timeline(tasks, selected_date)
@@ -217,6 +222,8 @@ def render_day_timeline(tasks: list, selected_date: str) -> None:
 
     for entry in entries:
         st.markdown(render_timeline_entry_html(entry), unsafe_allow_html=True)
+        if action_renderer:
+            action_renderer(entry["task"])
 
 
 def render_calendar_day(tasks: list[dict], selected_date: str) -> None:
@@ -345,12 +352,12 @@ def _render_calendar_styles() -> None:
         """
         <style>
         .flowcal-month-cell {
-            min-height: 112px;
+            min-height: 62px;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
-            padding: 8px;
+            padding: 4px 5px;
             background: #ffffff;
-            margin-bottom: 6px;
+            margin-bottom: 2px;
         }
         .flowcal-month-cell-selected {
             border: 2px solid #111827;
@@ -362,18 +369,18 @@ def _render_calendar_styles() -> None:
         .flowcal-month-day {
             font-weight: 700;
             color: #111827;
-            margin-bottom: 8px;
+            margin-bottom: 3px;
         }
         .flowcal-month-chips {
             display: flex;
             flex-wrap: wrap;
-            gap: 4px;
+            gap: 3px;
         }
         .flowcal-month-chips span {
             color: #ffffff;
             border-radius: 999px;
-            padding: 2px 6px;
-            font-size: 11px;
+            padding: 1px 5px;
+            font-size: 12px;
             line-height: 1.4;
         }
         .flowcal-empty-chip {
@@ -385,14 +392,14 @@ def _render_calendar_styles() -> None:
             border: 1px solid var(--border);
             border-left-width: 5px;
             border-radius: 8px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
+            padding: 6px 8px;
+            margin-bottom: 3px;
             background: var(--background);
         }
         .flowcal-card-title {
             font-weight: 650;
             color: #111827;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
         .flowcal-card-meta {
             color: #4b5563;

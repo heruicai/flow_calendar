@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from itertools import count
 
+import src.task_store as task_store
 from src.task_store import (
     add_task,
     delete_task,
@@ -9,6 +11,7 @@ from src.task_store import (
     get_tasks_by_date,
     load_tasks,
     mark_task_completed,
+    mark_task_pending,
 )
 
 
@@ -69,6 +72,21 @@ def test_mark_task_completed(tmp_path):
     assert completed is not None
     assert completed["status"] == "completed"
     assert completed["completed_at"]
+
+
+def test_mark_task_pending_undoes_completion_and_updates_timestamp(tmp_path, monkeypatch):
+    path = storage_path(tmp_path)
+    seconds = count()
+    monkeypatch.setattr(task_store, "_now_iso", lambda: f"2026-05-30T10:00:{next(seconds):02d}")
+    task = add_task({"title": "Buy medicine", "type": "essential_task"}, path)
+    completed = mark_task_completed(task["id"], path)
+
+    pending = mark_task_pending(task["id"], path)
+
+    assert pending is not None
+    assert pending["status"] == "pending"
+    assert pending["completed_at"] is None
+    assert pending["updated_at"] > completed["updated_at"]
 
 
 def test_delete_task(tmp_path):
