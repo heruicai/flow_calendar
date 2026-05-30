@@ -1,10 +1,19 @@
 import wave
 from inspect import getsource
+from types import SimpleNamespace
 
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
-from app import _render_page_styles, _task_action_specs, main
+from app import (
+    _cancel_task_editing,
+    _render_page_styles,
+    _render_task_actions,
+    _start_task_editing,
+    _task_action_specs,
+    _task_editor_specs,
+    main,
+)
 
 
 def test_page_has_one_primary_voice_input_area():
@@ -46,7 +55,32 @@ def test_task_action_specs_bind_unique_keys_to_each_task_id():
     assert len(keys) == len(set(keys))
     assert ("complete", "timeline_complete_deadline-1") in first
     assert ("delete", "timeline_delete_deadline-1") in first
-    assert ("postpone", "timeline_postpone_deadline-1") in first
+    assert ("postpone", "timeline_postpone_deadline-1") not in first
+
+
+def test_task_actions_and_editors_follow_task_type():
+    fixed = {"id": "fixed", "type": "fixed_event"}
+    deadline = {"id": "deadline", "type": "deadline_task"}
+    essential = {"id": "essential", "type": "essential_task"}
+
+    assert "postpone" not in dict(_task_action_specs(fixed, "timeline"))
+    assert _task_editor_specs(fixed) == ["edit_time", "edit_type"]
+    assert "postpone" not in dict(_task_action_specs(deadline, "timeline"))
+    assert _task_editor_specs(deadline) == ["edit_deadline", "edit_type"]
+    assert "postpone" in dict(_task_action_specs(essential, "timeline"))
+    assert _task_editor_specs(essential) == ["edit_type"]
+
+
+def test_edit_controls_are_buttons_without_visible_task_ids():
+    source = getsource(app_module)
+
+    assert '"Edit time"' in source
+    assert '"Edit deadline"' in source
+    assert '"Edit type"' in source
+    assert '· {task_id}' not in source
+    assert 'st.expander(f"Edit time' not in source
+    assert 'st.expander(f"Edit deadline' not in source
+    assert 'st.expander(f"Edit type' not in source
 
 
 def test_completed_task_action_specs_offer_undo_and_delete():
@@ -71,6 +105,7 @@ def test_task_action_click_targets_its_own_task_id(monkeypatch):
     monkeypatch.setattr(app_module.st, "columns", lambda count: [FakeColumn() for _ in range(count)])
     monkeypatch.setattr(app_module, "delete_task", deleted_task_ids.append)
     monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+    monkeypatch.setattr(app_module, "_render_active_task_editor", lambda task, context: None)
     monkeypatch.setattr(app_module.st, "rerun", lambda: None)
 
     app_module._render_task_actions(
@@ -95,6 +130,7 @@ def test_undo_completed_click_targets_its_own_task_id(monkeypatch):
         lambda task_id: pending_task_ids.append(task_id) or {"title": "Laundry"},
     )
     monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+    monkeypatch.setattr(app_module, "_render_active_task_editor", lambda task, context: None)
     monkeypatch.setattr(app_module.st, "rerun", lambda: None)
 
     app_module._render_task_actions(
@@ -103,6 +139,59 @@ def test_undo_completed_click_targets_its_own_task_id(monkeypatch):
     )
 
     assert pending_task_ids == ["done-2"]
+
+
+def test_edit_button_opens_only_its_task_form(monkeypatch):
+    rendered_editors = []
+
+    class FakeColumn:
+        def button(self, label, key, use_container_width):
+            return key == "timeline_edit_time_fixed-1"
+
+    state = SimpleNamespace(editing_task_id=None, editing_mode=None, editing_context=None)
+    monkeypatch.setattr(app_module.st, "session_state", state)
+    monkeypatch.setattr(app_module.st, "columns", lambda count: [FakeColumn() for _ in range(count)])
+    monkeypatch.setattr(app_module.st, "rerun", lambda: None)
+    monkeypatch.setattr(
+        app_module,
+        "_render_active_task_editor",
+        lambda task, context: rendered_editors.append((task["id"], context)),
+    )
+
+    _render_task_actions({"id": "fixed-1", "type": "fixed_event"}, "timeline")
+
+    assert state.editing_task_id == "fixed-1"
+    assert state.editing_mode == "edit_time"
+    assert state.editing_context == "timeline"
+    assert rendered_editors == [("fixed-1", "timeline")]
+
+
+def test_cancel_editing_closes_form_without_mutating_task(monkeypatch):
+    task = {"id": "fixed-1", "type": "fixed_event", "date": "2026-05-30"}
+    state = SimpleNamespace(
+        editing_task_id="fixed-1",
+        editing_mode="edit_time",
+        editing_context="timeline",
+    )
+    monkeypatch.setattr(app_module.st, "session_state", state)
+
+    _cancel_task_editing()
+
+    assert task == {"id": "fixed-1", "type": "fixed_event", "date": "2026-05-30"}
+    assert state.editing_task_id is None
+    assert state.editing_mode is None
+    assert state.editing_context is None
+
+
+def test_starting_another_edit_replaces_previous_form(monkeypatch):
+    state = SimpleNamespace(editing_task_id=None, editing_mode=None, editing_context=None)
+    monkeypatch.setattr(app_module.st, "session_state", state)
+
+    _start_task_editing("fixed-1", "edit_time", "timeline")
+    _start_task_editing("deadline-2", "edit_deadline", "timeline")
+
+    assert state.editing_task_id == "deadline-2"
+    assert state.editing_mode == "edit_deadline"
 
 
 def test_confirmation_step_uses_buttons_without_second_voice_input():

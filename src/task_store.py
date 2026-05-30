@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -230,3 +230,139 @@ def mark_task_postponed(
         },
         path,
     )
+
+
+def update_fixed_event_time(
+    task_id: str,
+    event_date: str,
+    start_time: str,
+    end_time: str,
+    path: str | None = None,
+) -> dict | None:
+    """Update a fixed event after validating its required schedule fields."""
+    event_date, start_time, end_time = _validated_fixed_event_schedule(event_date, start_time, end_time)
+    return update_task(
+        task_id,
+        {
+            "date": event_date,
+            "start_time": start_time,
+            "end_time": end_time,
+        },
+        path,
+    )
+
+
+def update_deadline_task(
+    task_id: str,
+    deadline: str,
+    estimated_duration_minutes: int | None = None,
+    path: str | None = None,
+) -> dict | None:
+    """Update a deadline task and derive its latest viable start time."""
+    if not deadline:
+        raise ValueError("Deadline tasks require a deadline.")
+    try:
+        parsed_deadline = datetime.fromisoformat(deadline)
+    except ValueError as exc:
+        raise ValueError("Deadline must be a valid ISO datetime.") from exc
+
+    duration = estimated_duration_minutes or None
+    latest_start_time = None
+    if duration:
+        if duration < 0:
+            raise ValueError("Estimated duration cannot be negative.")
+        latest_start_time = (parsed_deadline - timedelta(minutes=duration)).isoformat(timespec="seconds")
+
+    return update_task(
+        task_id,
+        {
+            "deadline": parsed_deadline.isoformat(timespec="seconds"),
+            "estimated_duration_minutes": duration,
+            "latest_start_time": latest_start_time,
+        },
+        path,
+    )
+
+
+def update_task_type(
+    task_id: str,
+    task_type: str,
+    *,
+    selected_date: str | None = None,
+    updates: dict[str, Any] | None = None,
+    path: str | None = None,
+) -> dict | None:
+    """Change task type while preserving the target type's data invariants."""
+    if task_type not in TASK_TYPES:
+        raise ValueError(f"Unsupported task type: {task_type}")
+
+    current_task = get_task_by_id(task_id, path)
+    if not current_task:
+        return None
+
+    target = deepcopy(current_task)
+    target.update(updates or {})
+    target["type"] = task_type
+    target["display_mode"] = DISPLAY_MODES_BY_TYPE[task_type]
+
+    if task_type == "fixed_event":
+        event_date, start_time, end_time = _validated_fixed_event_schedule(
+            target.get("date"),
+            target.get("start_time"),
+            target.get("end_time"),
+        )
+        target.update({"date": event_date, "start_time": start_time, "end_time": end_time})
+        target.update({"deadline": None, "latest_start_time": None})
+    elif task_type == "deadline_task":
+        if not target.get("deadline"):
+            raise ValueError("Deadline tasks require a deadline.")
+        target.update({"date": None, "start_time": None, "end_time": None})
+        parsed_deadline = datetime.fromisoformat(target["deadline"])
+        duration = target.get("estimated_duration_minutes")
+        target["latest_start_time"] = (
+            (parsed_deadline - timedelta(minutes=duration)).isoformat(timespec="seconds")
+            if duration
+            else None
+        )
+    elif task_type == "essential_task":
+        target.update(
+            {
+                "date": target.get("date") or selected_date,
+                "start_time": None,
+                "end_time": None,
+                "deadline": None,
+                "latest_start_time": None,
+            }
+        )
+        if not target["date"]:
+            raise ValueError("Essential tasks require a date.")
+    else:
+        target.update(
+            {
+                "date": None,
+                "start_time": None,
+                "end_time": None,
+                "deadline": None,
+                "latest_start_time": None,
+            }
+        )
+
+    return update_task(task_id, target, path)
+
+
+def _validated_fixed_event_schedule(
+    event_date: str | None,
+    start_time: str | None,
+    end_time: str | None,
+) -> tuple[str, str, str]:
+    if not event_date or not start_time or not end_time:
+        raise ValueError("Fixed events require date, start time, and end time.")
+    try:
+        normalized_date = date.fromisoformat(event_date).isoformat()
+        normalized_start = datetime.strptime(start_time, "%H:%M").strftime("%H:%M")
+        normalized_end = datetime.strptime(end_time, "%H:%M").strftime("%H:%M")
+    except ValueError as exc:
+        raise ValueError("Fixed event date or time format is invalid.") from exc
+    if normalized_start >= normalized_end:
+        raise ValueError("Fixed event end time must be after its start time.")
+    return normalized_date, normalized_start, normalized_end

@@ -22,7 +22,16 @@ from src.dialog_manager import (
     create_pending_action,
 )
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
-from src.task_store import delete_task, load_tasks, mark_task_completed, mark_task_pending, mark_task_postponed
+from src.task_store import (
+    delete_task,
+    load_tasks,
+    mark_task_completed,
+    mark_task_pending,
+    mark_task_postponed,
+    update_deadline_task,
+    update_fixed_event_time,
+    update_task_type,
+)
 from src.voice_adapter import (
     build_spoken_response,
     get_voice_input_mode_description,
@@ -116,6 +125,9 @@ def _init_session_state() -> None:
         "command_text": "",
         "command_audio_nonce": 0,
         "asr_message": "",
+        "editing_task_id": None,
+        "editing_mode": None,
+        "editing_context": None,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -405,20 +417,29 @@ def _task_action_specs(task: dict, context: str) -> list[tuple[str, str]]:
     else:
         actions.append(("undo_complete", f"{context}_undo_complete_{task_id}"))
     actions.append(("delete", f"{context}_delete_{task_id}"))
-    if task.get("status") != "completed" and task.get("type") in {
-        "deadline_task",
-        "essential_task",
-        "flexible_plan",
-    }:
+    if task.get("status") != "completed" and task.get("type") in {"essential_task", "flexible_plan"}:
         actions.append(("postpone", f"{context}_postpone_{task_id}"))
     return actions
+
+
+def _task_editor_specs(task: dict) -> list[str]:
+    editors = []
+    if task.get("type") == "fixed_event":
+        editors.append("edit_time")
+    elif task.get("type") == "deadline_task":
+        editors.append("edit_deadline")
+    editors.append("edit_type")
+    return editors
 
 
 def _render_task_actions(task: dict, context: str) -> None:
     task_id = task.get("id")
     if not task_id:
         return
-    action_specs = _task_action_specs(task, context)
+    action_specs = _task_action_specs(task, context) + [
+        (editor, f"{context}_{editor}_{task_id}")
+        for editor in _task_editor_specs(task)
+    ]
     columns = st.columns(len(action_specs))
     controls = {
         action: (column, key)
@@ -453,6 +474,184 @@ def _render_task_actions(task: dict, context: str) -> None:
         updated = mark_task_postponed(task_id, new_date)
         _complete_voice_round(f"已将{updated['title']}推迟到{new_date}。")
         st.rerun()
+    for mode, label in (
+        ("edit_time", "Edit time"),
+        ("edit_deadline", "Edit deadline"),
+        ("edit_type", "Edit type"),
+    ):
+        if mode in controls and controls[mode][0].button(
+            label,
+            key=controls[mode][1],
+            use_container_width=True,
+        ):
+            _start_task_editing(task_id, mode, context)
+            st.rerun()
+    _render_active_task_editor(task, context)
+
+
+def _render_active_task_editor(task: dict, context: str) -> None:
+    task_id = task.get("id")
+    if not task_id or not _is_editing_task(task_id, context):
+        return
+    mode = st.session_state.editing_mode
+    if mode == "edit_time":
+        _render_fixed_event_editor(task, context)
+    elif mode == "edit_deadline":
+        _render_deadline_editor(task, context)
+    elif mode == "edit_type":
+        _render_type_editor(task, context)
+
+
+def _render_fixed_event_editor(task: dict, context: str) -> None:
+    task_id = task["id"]
+    prefix = f"{context}_edit_time_{task_id}"
+    st.markdown(f"##### Edit time: {task.get('title', 'Task')}")
+    with st.form(f"{prefix}_form"):
+        event_date = st.text_input("Date (YYYY-MM-DD)", value=task.get("date") or "", key=f"{prefix}_date")
+        start_time = st.text_input("Start time (HH:MM)", value=task.get("start_time") or "", key=f"{prefix}_start")
+        end_time = st.text_input("End time (HH:MM)", value=task.get("end_time") or "", key=f"{prefix}_end")
+        submit, cancel = st.columns(2)
+        if submit.form_submit_button("Save changes", key=f"{prefix}_save", use_container_width=True):
+            _handle_task_update(
+                lambda: update_fixed_event_time(task_id, event_date, start_time, end_time),
+                "Task time updated.",
+            )
+        if cancel.form_submit_button("Cancel", key=f"{prefix}_cancel", use_container_width=True):
+            _cancel_task_editing()
+            st.rerun()
+
+
+def _render_deadline_editor(task: dict, context: str) -> None:
+    task_id = task["id"]
+    prefix = f"{context}_edit_deadline_{task_id}"
+    deadline_date, deadline_time = _split_datetime(task.get("deadline"))
+    st.markdown(f"##### Edit deadline: {task.get('title', 'Task')}")
+    with st.form(f"{prefix}_form"):
+        deadline_date = st.text_input("Deadline date (YYYY-MM-DD)", value=deadline_date, key=f"{prefix}_date")
+        deadline_time = st.text_input("Deadline time (HH:MM)", value=deadline_time, key=f"{prefix}_time")
+        duration = st.number_input(
+            "Estimated duration (minutes)",
+            min_value=0,
+            step=15,
+            value=int(task.get("estimated_duration_minutes") or 0),
+            key=f"{prefix}_duration",
+        )
+        submit, cancel = st.columns(2)
+        if submit.form_submit_button("Save changes", key=f"{prefix}_save", use_container_width=True):
+            deadline = f"{deadline_date}T{deadline_time}:00" if deadline_date and deadline_time else ""
+            _handle_task_update(
+                lambda: update_deadline_task(task_id, deadline, int(duration) or None),
+                "Task deadline updated.",
+            )
+        if cancel.form_submit_button("Cancel", key=f"{prefix}_cancel", use_container_width=True):
+            _cancel_task_editing()
+            st.rerun()
+
+
+def _render_type_editor(task: dict, context: str) -> None:
+    task_id = task["id"]
+    prefix = f"{context}_edit_type_{task_id}"
+    task_types = ["fixed_event", "deadline_task", "essential_task", "flexible_plan"]
+    st.markdown(f"##### Edit type: {task.get('title', 'Task')}")
+    with st.form(f"{prefix}_form"):
+        task_type = st.selectbox(
+            "Task type",
+            options=task_types,
+            index=task_types.index(task.get("type")) if task.get("type") in task_types else 0,
+            key=f"{prefix}_select",
+        )
+        updates = _render_type_specific_inputs(task, task_type, prefix)
+        submit, cancel = st.columns(2)
+        if submit.form_submit_button("Save changes", key=f"{prefix}_save", use_container_width=True):
+            _handle_task_update(
+                lambda: update_task_type(
+                    task_id,
+                    task_type,
+                    selected_date=st.session_state.selected_date,
+                    updates=updates,
+                ),
+                "Task type updated.",
+            )
+        if cancel.form_submit_button("Cancel", key=f"{prefix}_cancel", use_container_width=True):
+            _cancel_task_editing()
+            st.rerun()
+
+
+def _render_type_specific_inputs(task: dict, task_type: str, prefix: str) -> dict:
+    if task_type == "fixed_event":
+        return {
+            "date": st.text_input("Date (YYYY-MM-DD)", value=task.get("date") or "", key=f"{prefix}_date"),
+            "start_time": st.text_input(
+                "Start time (HH:MM)",
+                value=task.get("start_time") or "",
+                key=f"{prefix}_start",
+            ),
+            "end_time": st.text_input("End time (HH:MM)", value=task.get("end_time") or "", key=f"{prefix}_end"),
+        }
+    if task_type == "deadline_task":
+        return {
+            "deadline": st.text_input(
+                "Deadline (YYYY-MM-DDTHH:MM:SS)",
+                value=task.get("deadline") or "",
+                key=f"{prefix}_deadline",
+            ),
+            "estimated_duration_minutes": int(
+                st.number_input(
+                    "Estimated duration (minutes)",
+                    min_value=0,
+                    step=15,
+                    value=int(task.get("estimated_duration_minutes") or 0),
+                    key=f"{prefix}_duration",
+                )
+            )
+            or None,
+        }
+    return {}
+
+
+def _handle_task_update(update_callback, success_message: str) -> None:
+    try:
+        updated = update_callback()
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    if not updated:
+        st.error("Task not found.")
+        return
+    st.session_state.system_response = success_message
+    st.session_state.spoken_response = build_spoken_response(success_message)
+    _cancel_task_editing()
+    st.rerun()
+
+
+def _start_task_editing(task_id: str, mode: str, context: str) -> None:
+    st.session_state.editing_task_id = task_id
+    st.session_state.editing_mode = mode
+    st.session_state.editing_context = context
+
+
+def _cancel_task_editing() -> None:
+    st.session_state.editing_task_id = None
+    st.session_state.editing_mode = None
+    st.session_state.editing_context = None
+
+
+def _is_editing_task(task_id: str, context: str) -> bool:
+    return (
+        st.session_state.editing_task_id == task_id
+        and st.session_state.editing_context == context
+        and st.session_state.editing_mode is not None
+    )
+
+
+def _split_datetime(value: str | None) -> tuple[str, str]:
+    if not value:
+        return "", ""
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return "", ""
+    return parsed.date().isoformat(), parsed.strftime("%H:%M")
 
 
 def _next_task_date(task: dict) -> str:

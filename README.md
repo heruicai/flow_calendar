@@ -22,6 +22,7 @@ FlowCal is designed for users who manage plans under real time pressure:
 - Query schedule.
 - Mark tasks completed.
 - Undo completed tasks from their task cards.
+- Edit task schedules, deadlines, and task types from compact card controls.
 - Offline voice confirmation and final response.
 - Visual calendar view.
 - Local JSON task storage.
