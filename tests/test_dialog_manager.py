@@ -24,7 +24,7 @@ def test_add_event_generates_confirmation_prompt():
 
     assert "添加算法面试" in prompt
     assert "15:00到16:00" in prompt
-    assert "确认或取消" in prompt
+    assert "点击确认添加或取消本次操作" in prompt
 
 
 def test_parse_confirmation_text_recognizes_common_answers():
@@ -66,3 +66,43 @@ def test_cancel_does_not_modify_store(tmp_path):
     assert result["success"] is True
     assert result["response_text"] == "已取消本次操作。"
     assert load_tasks(path) == before
+
+
+def test_create_pending_add_action_does_not_modify_store(tmp_path):
+    path = str(tmp_path / "tasks.json")
+
+    pending = create_pending_action(
+        {
+            "intent": "add_event",
+            "task": {"title": "算法面试", "type": "fixed_event", "date": "2026-05-31"},
+        }
+    )
+
+    assert pending["requires_confirmation"] is True
+    assert load_tasks(path) == []
+
+
+def test_delete_event_waits_for_confirmation(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task({"title": "算法面试", "type": "fixed_event"}, path)
+    pending = create_pending_action({"intent": "delete_event"}, matched_task=task)
+
+    assert load_tasks(path)[0]["id"] == task["id"]
+
+    result = apply_confirmed_action(pending, path)
+
+    assert result["success"] is True
+    assert load_tasks(path) == []
+
+
+def test_mark_completed_waits_for_confirmation(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task({"title": "洗衣服", "type": "essential_task"}, path)
+    pending = create_pending_action({"intent": "mark_completed"}, matched_task=task)
+
+    assert load_tasks(path)[0]["status"] == "pending"
+
+    result = apply_confirmed_action(pending, path)
+
+    assert result["success"] is True
+    assert load_tasks(path)[0]["status"] == "completed"

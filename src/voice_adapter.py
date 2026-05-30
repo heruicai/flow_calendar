@@ -98,9 +98,6 @@ def build_spoken_response(response_text: str) -> str:
     if not spoken_text:
         return ""
 
-    max_length = 140
-    if len(spoken_text) > max_length:
-        spoken_text = spoken_text[: max_length - 3].rstrip() + "..."
     return spoken_text
 
 

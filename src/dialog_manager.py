@@ -37,13 +37,13 @@ def build_confirmation_prompt(pending_action: dict) -> str:
         task = parsed.get("task") or {}
         title = task.get("title") or "未命名任务"
         time_description = _format_task_time(task)
-        return f"我理解你要添加{title}{time_description}。请说确认或取消。"
+        return f"我理解你要添加{title}{time_description}。请点击确认添加或取消本次操作。"
     if intent == "delete_event":
         title = matched_task.get("title") or "未命名任务"
-        return f"我找到任务：{title}。是否确认删除？请说确认或取消。"
+        return f"我找到任务：{title}。是否确认删除？请点击确认删除或取消本次操作。"
     if intent == "mark_completed":
         title = matched_task.get("title") or "未命名任务"
-        return f"我找到任务：{title}。是否标记为完成？请说确认或取消。"
+        return f"我找到任务：{title}。是否标记为完成？请点击确认完成或取消本次操作。"
     return ""
 
 
