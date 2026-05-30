@@ -63,7 +63,7 @@ def main() -> None:
         _render_flexible_pool(tasks)
         st.subheader("Final Response")
         st.info(st.session_state.system_response)
-        _render_voice_reply()
+        _render_voice_reply("final_response")
 
 
 def _init_session_state() -> None:
@@ -103,14 +103,19 @@ def _render_voice_conversation() -> None:
         _render_confirmation_step()
     else:
         st.success("本轮语音交互已结束。")
-        if st.button("Start new voice command", type="primary", use_container_width=True):
+        if st.button(
+            "Start new voice command",
+            key="start_new_voice_command",
+            type="primary",
+            use_container_width=True,
+        ):
             _reset_voice_round()
             st.rerun()
 
     with st.expander("Text Command fallback"):
         st.caption("麦克风不可用时，可直接输入同样的日历指令。")
         typed_command = st.text_area("Text command", key="text_fallback_command", height=90)
-        if st.button("Parse text command", use_container_width=True):
+        if st.button("Parse text command", key="parse_text_command", use_container_width=True):
             _handle_command(typed_command)
             st.rerun()
 
@@ -141,7 +146,12 @@ def _render_voice_command_step() -> None:
         placeholder="录音转写结果会显示在这里，也可以手动修正。",
         height=90,
     )
-    if st.button("Continue / Parse", type="primary", use_container_width=True):
+    if st.button(
+        "Continue / Parse",
+        key="continue_parse_voice_command",
+        type="primary",
+        use_container_width=True,
+    ):
         _handle_command(command_text)
         st.rerun()
 
@@ -150,7 +160,7 @@ def _render_confirmation_step() -> None:
     st.markdown("#### 2. Confirm the pending change")
     prompt = st.session_state.system_response
     st.warning(prompt)
-    _render_voice_reply()
+    _render_voice_reply("confirmation_prompt")
 
     audio_file = st.audio_input(
         "再次点击录音，请说“确认”或“取消”",
@@ -171,7 +181,12 @@ def _render_confirmation_step() -> None:
         key="confirmation_text",
         placeholder="确认 / 取消",
     )
-    if st.button("Submit confirmation", type="primary", use_container_width=True):
+    if st.button(
+        "Submit confirmation",
+        key="submit_voice_confirmation",
+        type="primary",
+        use_container_width=True,
+    ):
         _handle_confirmation(confirmation_text)
         st.rerun()
 
@@ -267,7 +282,7 @@ def _set_system_response(message: str, speak: bool = False) -> None:
             st.session_state.voice_reply = text_to_speech(message)
 
 
-def _render_voice_reply() -> None:
+def _render_voice_reply(render_location: str) -> None:
     voice_reply = st.session_state.voice_reply
     if not voice_reply:
         st.caption("等待语音回复。")
@@ -276,7 +291,15 @@ def _render_voice_reply() -> None:
     st.write(voice_reply.get("spoken_text") or "")
     audio_path = voice_reply.get("audio_path")
     if voice_reply.get("success") and audio_path and Path(audio_path).exists():
-        st.audio(audio_path, format="audio/wav", autoplay=True)
+        # Streamlit 1.58 st.audio has no key parameter. A stable per-location
+        # width keeps simultaneous confirmation and final players distinct.
+        audio_width = "stretch" if render_location == "confirmation_prompt" else 360
+        st.audio(
+            audio_path,
+            format="audio/wav",
+            autoplay=True,
+            width=audio_width,
+        )
     st.caption(voice_reply.get("message") or "")
 
 
@@ -298,9 +321,16 @@ def _reset_voice_round() -> None:
 def _render_month_and_day_views(tasks: list[dict]) -> None:
     st.subheader("Month Calendar")
     control_columns = st.columns([1, 1, 2])
-    year = control_columns[0].number_input("Year", min_value=2000, max_value=2100, value=int(st.session_state.calendar_year))
+    year = control_columns[0].number_input(
+        "Year",
+        key="calendar_year_input",
+        min_value=2000,
+        max_value=2100,
+        value=int(st.session_state.calendar_year),
+    )
     month = control_columns[1].selectbox(
         "Month",
+        key="calendar_month_select",
         options=list(range(1, 13)),
         index=int(st.session_state.calendar_month) - 1,
         format_func=lambda value: datetime(2000, value, 1).strftime("%B"),
