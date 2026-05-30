@@ -186,6 +186,31 @@ def test_parse_user_command_accepts_glm_add_event(monkeypatch):
     assert result["task"]["type"] == "fixed_event"
 
 
+def test_parse_user_command_simplifies_all_glm_text_fields(monkeypatch):
+    monkeypatch.setenv("ZHIPU_API_KEY", "test-key")
+    monkeypatch.setattr(
+        glm_parser,
+        "parse_with_glm",
+        lambda *args, **kwargs: _glm_result(
+            "add_event",
+            task={
+                "title": "週五會議",
+                "type": "essential_task",
+                "date": "2026-05-30",
+                "display_mode": "essential_bar",
+            },
+            normalized_text="週五會議",
+            response_text="已新增週五會議",
+        ),
+    )
+
+    result = parse_user_command("週五會議", now=NOW)
+
+    assert result["normalized_text"] == "周五会议"
+    assert result["task"]["title"] == "周五会议"
+    assert result["response_text"] == "已新增周五会议"
+
+
 def test_low_confidence_glm_result_falls_back_to_rules(monkeypatch):
     monkeypatch.setenv("ZHIPU_API_KEY", "test-key")
     monkeypatch.setattr(
@@ -236,3 +261,21 @@ def test_prompt_sends_only_minimal_task_context():
     assert '"status": "pending"' in prompt
     assert "private-id" not in prompt
     assert "private notes" not in prompt
+
+
+def test_prompt_simplifies_task_context():
+    prompt = build_glm_prompt(
+        "查看週五任務",
+        now=NOW,
+        tasks=[{"title": "週五會議", "type": "fixed_event"}],
+    )
+
+    assert '"title": "周五会议"' in prompt
+    assert "週五會議" not in prompt
+
+
+def test_prompt_requires_simplified_chinese_and_homophone_correction():
+    prompt = build_glm_prompt("把蒜粉面试改到明天", now=NOW)
+
+    assert "Simplified Chinese only" in prompt
+    assert "蒜粉面试 -> 算法面试" in prompt

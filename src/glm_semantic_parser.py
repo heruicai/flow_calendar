@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from src.command_parser import DISPLAY_MODES_BY_TYPE, SUPPORTED_INTENTS, SUPPORTED_TASK_TYPES, parse_command
-from src.voice_adapter import normalize_voice_text
+from src.voice_adapter import normalize_chinese_text, normalize_voice_text
 
 
 DEFAULT_ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
@@ -83,8 +83,10 @@ Requirements:
   deadline changes, and task-type changes.
 - Return normalized_text containing the corrected Chinese command used for parsing.
 - Return corrections as a JSON list describing high-confidence ASR or typo corrections.
+- normalized_text, task titles, keywords, questions, reasons, and replies must use Simplified Chinese only.
 - Correct obvious ASR mistakes only when confidence is high. Use existing task titles as
-  evidence when correcting task names. Preserve the original wording when uncertain.
+  strong evidence when correcting task names, including homophone mistakes such as
+  蒜粉面试 -> 算法面试. Preserve the original wording when uncertain.
 - For update_event, put the existing task clues in target and requested changes in updates.
 - If required details are uncertain, set need_clarification=true and ask a specific question.
 - confidence must be a number from 0 to 1.
@@ -170,6 +172,7 @@ def parse_user_command(text: str, now=None, tasks=None, use_ai=True) -> dict:
         try:
             parsed = validate_glm_parse_result(parse_with_glm(normalized, now=now, tasks=tasks))
             if parsed["confidence"] >= MIN_GLM_CONFIDENCE:
+                parsed = _simplify_strings(parsed)
                 parsed["normalized_text"] = normalize_voice_text(parsed.get("normalized_text") or normalized)
                 return parsed
         except Exception:
@@ -194,10 +197,24 @@ def _create_glm_client():
 def _sanitize_tasks(tasks: list[dict]) -> list[dict[str, Any]]:
     allowed_fields = ("title", "date", "type", "status")
     return [
-        {field: task.get(field) for field in allowed_fields if task.get(field) is not None}
+        {
+            field: normalize_chinese_text(task[field]) if isinstance(task.get(field), str) else task[field]
+            for field in allowed_fields
+            if task.get(field) is not None
+        }
         for task in tasks
         if isinstance(task, dict)
     ]
+
+
+def _simplify_strings(value):
+    if isinstance(value, str):
+        return normalize_chinese_text(value)
+    if isinstance(value, list):
+        return [_simplify_strings(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _simplify_strings(item) for key, item in value.items()}
+    return value
 
 
 def _validate_task_shape(task: dict) -> None:

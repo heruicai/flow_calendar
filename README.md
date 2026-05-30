@@ -145,6 +145,7 @@ Third-party dependencies:
 - `faster-whisper`: offline ASR inference after the Whisper model has been downloaded locally.
 - `pyttsx3`: offline TTS generation; on Windows it uses the installed SAPI voices.
 - `openai`: OpenAI-compatible SDK used only by the optional GLM semantic parser.
+- `opencc-python-reimplemented`: local Traditional-to-Simplified Chinese conversion.
 
 No external voice API is used. No API key is required. Whisper model preparation requires network access only when the model is not already cached. Generated WAV files live under `outputs/audio/` and are ignored by Git.
 
@@ -153,6 +154,8 @@ No external voice API is used. No API key is required. Whisper model preparation
 FlowCal supports an optional GLM AI semantic parser for more flexible calendar commands and complex task updates. The local rule-based parser remains the default when no API key is configured. If GLM fails, times out, returns invalid JSON, or returns an unsupported structure, FlowCal automatically falls back to the local parser.
 
 When GLM confidently corrects an ASR mistake or typo, FlowCal displays the corrected `Normalized user input` in the conversation panel and uses that text for semantic parsing. Uncertain text is preserved instead of being rewritten aggressively.
+
+All visible Chinese text passes through local OpenCC Traditional-to-Simplified conversion. FlowCal also applies a small local dictionary for recurring ASR homophone mistakes. With GLM enabled, the parser can use minimal task context to correct additional high-confidence homophone errors, especially task names.
 
 Configure GLM with environment variables. Never write API keys into source code or commit them to GitHub.
 
