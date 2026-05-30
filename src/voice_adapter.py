@@ -13,6 +13,20 @@ from uuid import uuid4
 DEFAULT_WHISPER_MODEL = "base"
 OUTPUT_AUDIO_DIR = Path("outputs/audio")
 _WHISPER_MODELS: dict[str, object] = {}
+_OPENCC_CONVERTER = None
+
+COMMON_ASR_PHRASES = {
+    "蒜粉面试": "算法面试",
+    "算粉面试": "算法面试",
+    "算发面试": "算法面试",
+    "算反面试": "算法面试",
+    "开灰": "开会",
+    "会意": "会议",
+    "组灰": "组会",
+    "接止时间": "截止时间",
+    "结止时间": "截止时间",
+    "代办": "待办",
+}
 
 TRADITIONAL_PHRASES = {
     "語音": "语音",
@@ -73,11 +87,15 @@ TRADITIONAL_CHARACTERS = str.maketrans(
 
 
 def normalize_chinese_text(text: str) -> str:
-    """Convert common Traditional Chinese ASR output to Simplified Chinese."""
+    """Convert Chinese text to Simplified Chinese with lightweight local rules."""
     normalized = str(text or "")
     for traditional, simplified in TRADITIONAL_PHRASES.items():
         normalized = normalized.replace(traditional, simplified)
-    return normalized.translate(TRADITIONAL_CHARACTERS)
+    normalized = normalized.translate(TRADITIONAL_CHARACTERS)
+    normalized = _get_opencc_converter().convert(normalized)
+    for mistaken, corrected in COMMON_ASR_PHRASES.items():
+        normalized = normalized.replace(mistaken, corrected)
+    return normalized
 
 
 def normalize_voice_text(text: str) -> str:
@@ -213,6 +231,15 @@ def _load_pyttsx3():
     import pyttsx3
 
     return pyttsx3
+
+
+def _get_opencc_converter():
+    global _OPENCC_CONVERTER
+    if _OPENCC_CONVERTER is None:
+        from opencc import OpenCC
+
+        _OPENCC_CONVERTER = OpenCC("t2s")
+    return _OPENCC_CONVERTER
 
 
 def _wait_for_audio_file(audio_path: Path) -> None:

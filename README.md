@@ -144,8 +144,46 @@ Third-party dependencies:
 - `pytest`: automated test runner.
 - `faster-whisper`: offline ASR inference after the Whisper model has been downloaded locally.
 - `pyttsx3`: offline TTS generation; on Windows it uses the installed SAPI voices.
+- `openai`: OpenAI-compatible SDK used only by the optional GLM semantic parser.
+- `opencc-python-reimplemented`: local Traditional-to-Simplified Chinese conversion.
 
 No external voice API is used. No API key is required. Whisper model preparation requires network access only when the model is not already cached. Generated WAV files live under `outputs/audio/` and are ignored by Git.
+
+## AI Semantic Parser with GLM
+
+FlowCal supports an optional GLM AI semantic parser for more flexible calendar commands and complex task updates. The local rule-based parser remains the default when no API key is configured. If GLM fails, times out, returns invalid JSON, or returns an unsupported structure, FlowCal automatically falls back to the local parser.
+
+When GLM confidently corrects an ASR mistake or typo, FlowCal displays the corrected `Normalized user input` in the conversation panel and uses that text for semantic parsing. Uncertain text is preserved instead of being rewritten aggressively.
+
+All visible Chinese text passes through local OpenCC Traditional-to-Simplified conversion. FlowCal also applies a small local dictionary for recurring ASR homophone mistakes. With GLM enabled, the parser can use minimal task context to correct additional high-confidence homophone errors, especially task names.
+
+Configure GLM with environment variables. Never write API keys into source code or commit them to GitHub.
+
+Windows PowerShell:
+
+```powershell
+$env:ZHIPU_API_KEY="your_api_key_here"
+$env:ZHIPU_BASE_URL="https://open.bigmodel.cn/api/paas/v4/"
+$env:ZHIPU_MODEL="glm-4-flash-250414"
+```
+
+Linux/macOS:
+
+```bash
+export ZHIPU_API_KEY="your_api_key_here"
+export ZHIPU_BASE_URL="https://open.bigmodel.cn/api/paas/v4/"
+export ZHIPU_MODEL="glm-4-flash-250414"
+```
+
+`ZHIPU_BASE_URL` and `ZHIPU_MODEL` are optional. When `ZHIPU_API_KEY` is not set, FlowCal continues using the local rule-based parser.
+
+Privacy behavior:
+
+- By default, FlowCal does not call an external semantic model.
+- After `ZHIPU_API_KEY` is configured, FlowCal sends only normalized user text and minimal task context to GLM for semantic parsing.
+- Audio recordings are never uploaded to GLM.
+- FlowCal does not upload the complete local `data/tasks.json` file. Task context is limited to `title`, `date`, `type`, and `status`.
+- API keys must remain in local environment variables and must not be committed.
 
 ## 12. Original Work
 

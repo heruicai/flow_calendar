@@ -247,7 +247,12 @@ def test_tts_failure_keeps_text_reply_visible():
 
 
 def test_update_event_builds_pending_update_action(monkeypatch):
-    state = SimpleNamespace(pending_action=None, dialog_state="idle")
+    state = SimpleNamespace(
+        pending_action=None,
+        dialog_state="idle",
+        parser_source="rule",
+        last_normalized_command="",
+    )
     task = {"id": "laundry", "title": "洗衣服", "type": "essential_task", "date": "2026-05-29"}
     responses = []
 
@@ -262,3 +267,28 @@ def test_update_event_builds_pending_update_action(monkeypatch):
     assert state.pending_action["update_plan"]["matched_task"]["id"] == "laundry"
     assert state.pending_action["update_plan"]["updates"]["date"]
     assert "我找到任务：洗衣服" in responses[0]
+
+
+def test_handle_command_keeps_corrected_text_visible(monkeypatch):
+    state = SimpleNamespace(parser_source="rule", last_normalized_command="")
+
+    monkeypatch.setattr(app_module.st, "session_state", state)
+    monkeypatch.setattr(app_module, "load_tasks", lambda: [])
+    monkeypatch.setattr(
+        app_module,
+        "parse_user_command",
+        lambda *args, **kwargs: {
+            "intent": "query_schedule",
+            "query": {"date": "2026-05-30"},
+            "source": "glm",
+            "normalized_text": "明天有什么安排",
+        },
+    )
+    monkeypatch.setattr(app_module, "_set_selected_date", lambda value: None)
+    monkeypatch.setattr(app_module, "build_schedule_summary", lambda tasks, selected_date: "summary")
+    monkeypatch.setattr(app_module, "_complete_voice_round", lambda message: None)
+
+    app_module._handle_command("明天有神么安排")
+
+    assert state.parser_source == "glm"
+    assert state.last_normalized_command == "明天有什么安排"

@@ -14,13 +14,13 @@ from src.calendar_view import (
     render_month_calendar,
     render_task_card_html,
 )
-from src.command_parser import parse_command
 from src.dialog_manager import (
     apply_confirmed_action,
     build_confirmation_prompt,
     cancel_pending_action,
     create_pending_action,
 )
+from src.glm_semantic_parser import is_glm_parser_available, parse_user_command
 from src.response_generator import build_parse_response, build_schedule_summary, build_welcome_message
 from src.semantic_command_assistant import build_update_plan
 from src.task_store import (
@@ -126,6 +126,8 @@ def _init_session_state() -> None:
         "command_text": "",
         "command_audio_nonce": 0,
         "asr_message": "",
+        "parser_source": "rule",
+        "last_normalized_command": "",
         "editing_task_id": None,
         "editing_mode": None,
         "editing_context": None,
@@ -139,6 +141,19 @@ def _render_voice_conversation() -> None:
     st.caption("Record a command, review the text, then parse it.")
     with st.expander("Voice input details", expanded=False):
         st.caption(get_voice_input_mode_description())
+        st.caption(
+            "AI parser: GLM enabled"
+            if is_glm_parser_available()
+            else "AI parser: Rule fallback"
+        )
+        st.caption(f"Last parse source: {st.session_state.parser_source}")
+    if st.session_state.last_normalized_command:
+        st.text_area(
+            "Normalized user input",
+            value=st.session_state.last_normalized_command,
+            height=68,
+            disabled=True,
+        )
 
     state = st.session_state.dialog_state
     if state == "idle":
@@ -232,7 +247,9 @@ def _handle_command(command: str) -> None:
         _set_system_response("请先录音，或输入一条日历指令。")
         return
 
-    parsed = parse_command(normalized_command)
+    parsed = parse_user_command(normalized_command, tasks=load_tasks())
+    st.session_state.parser_source = parsed.get("source", "rule")
+    st.session_state.last_normalized_command = parsed.get("normalized_text", normalized_command)
     if parsed.get("need_clarification"):
         _set_system_response(build_parse_response(parsed), speak=True)
         return
@@ -365,6 +382,7 @@ def _reset_voice_round() -> None:
     st.session_state.command_text = ""
     st.session_state.command_audio_nonce += 1
     st.session_state.asr_message = ""
+    st.session_state.last_normalized_command = ""
     st.session_state.voice_reply = None
     st.session_state.system_response = build_welcome_message()
 

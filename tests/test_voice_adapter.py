@@ -56,3 +56,15 @@ def test_spoken_response_uses_simplified_chinese():
     spoken = build_spoken_response("請確認語音任務，標記會議結束")
 
     assert spoken == "请确认语音任务，标记会议结束"
+
+
+def test_normalize_voice_text_uses_opencc_for_unmapped_traditional_chinese():
+    normalized = normalize_voice_text("週五處理專案進度與資料")
+
+    assert normalized == "周五处理专案进度与资料"
+
+
+def test_normalize_voice_text_corrects_common_homophone_asr_mistake():
+    normalized = normalize_voice_text("把蒜粉面试改到明天下午四点")
+
+    assert normalized == "把算法面试改到明天下午四点"
