@@ -4,20 +4,26 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from src.semantic_command_assistant import apply_update_plan, build_update_confirmation
 from src.task_store import add_task, delete_task, mark_task_completed
 
 
-CONFIRMATION_REQUIRED_INTENTS = {"add_event", "delete_event", "mark_completed"}
+CONFIRMATION_REQUIRED_INTENTS = {"add_event", "delete_event", "mark_completed", "update_event"}
 CONFIRM_WORDS = ("确认", "可以", "是的", "好的", "好", "确定", "执行")
 CANCEL_WORDS = ("取消", "不要", "不用", "算了", "停止", "否")
 
 
-def create_pending_action(parsed_command: dict, matched_task: dict | None = None) -> dict:
+def create_pending_action(
+    parsed_command: dict,
+    matched_task: dict | None = None,
+    update_plan: dict | None = None,
+) -> dict:
     """Create a serializable action that can be applied after confirmation."""
     return {
         "intent": parsed_command.get("intent"),
         "parsed_command": deepcopy(parsed_command),
         "matched_task": deepcopy(matched_task),
+        "update_plan": deepcopy(update_plan),
         "requires_confirmation": requires_confirmation(parsed_command),
     }
 
@@ -44,6 +50,8 @@ def build_confirmation_prompt(pending_action: dict) -> str:
     if intent == "mark_completed":
         title = matched_task.get("title") or "未命名任务"
         return f"我找到任务：{title}。是否标记为完成？请点击确认完成或取消本次操作。"
+    if intent == "update_event":
+        return build_update_confirmation(pending_action.get("update_plan") or {})
     return ""
 
 
@@ -66,6 +74,8 @@ def apply_confirmed_action(pending_action: dict, task_store_path=None) -> dict:
     if intent == "add_event":
         stored_task = add_task(parsed.get("task") or {}, task_store_path)
         return _result(True, f"已添加{stored_task['title']}。", stored_task)
+    if intent == "update_event":
+        return apply_update_plan(pending_action.get("update_plan") or {}, task_store_path)
 
     task_id = matched_task.get("id")
     title = matched_task.get("title") or "任务"

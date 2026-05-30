@@ -7,6 +7,8 @@ from src.dialog_manager import (
     requires_confirmation,
 )
 from src.task_store import add_task, load_tasks
+from src.command_parser import parse_command
+from src.semantic_command_assistant import build_update_plan
 
 
 def test_add_event_generates_confirmation_prompt():
@@ -106,3 +108,16 @@ def test_mark_completed_waits_for_confirmation(tmp_path):
 
     assert result["success"] is True
     assert load_tasks(path)[0]["status"] == "completed"
+
+
+def test_update_event_waits_for_confirmation_and_persists_update(tmp_path):
+    path = str(tmp_path / "tasks.json")
+    task = add_task({"title": "洗衣服", "type": "essential_task", "date": "2026-05-29"}, path)
+    parsed = parse_command("把洗衣服改到明天")
+    plan = build_update_plan(parsed, [task])
+    pending = create_pending_action(parsed, matched_task=task, update_plan=plan)
+
+    result = apply_confirmed_action(pending, path)
+
+    assert result["success"] is True
+    assert load_tasks(path)[0]["date"] == parsed["updates"]["date"]
