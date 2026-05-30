@@ -220,4 +220,6 @@ def build_parse_response(parsed: dict) -> str:
         return "Delete command parsed."
     if intent == "mark_completed":
         return "Completion command parsed."
+    if intent == "update_event":
+        return "请在对应任务卡片中使用 Edit time / Edit deadline / Edit type 按钮完成修改。"
     return "Command parsed."

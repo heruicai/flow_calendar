@@ -12,6 +12,7 @@ SUPPORTED_INTENTS = {
     "delete_event",
     "query_schedule",
     "mark_completed",
+    "update_event",
 }
 
 SUPPORTED_TASK_TYPES = {
@@ -63,6 +64,22 @@ QUERY_KEYWORDS = (
     "日程",
     "安排是什么",
     "还剩什么",
+)
+
+UPDATE_KEYWORDS = (
+    "重新安排",
+    "改一下",
+    "修改",
+    "更改",
+    "调整",
+    "换成",
+    "变成",
+    "改成",
+    "改到",
+    "改",
+    "reschedule",
+    "update",
+    "edit",
 )
 
 WEEKDAYS = {
@@ -126,6 +143,9 @@ def parse_command(text: str, now: datetime | None = None) -> dict:
         result["response_text"] = f"正在查看 {date_info['date']} 的日程。"
         return result
 
+    if intent == "update_event":
+        return _build_update_result(command, current_time, result)
+
     if intent in {"delete_event", "mark_completed"}:
         if not title:
             return _with_clarification(result, "请补充任务名称")
@@ -175,7 +195,148 @@ def _detect_intent(text: str) -> str:
         return "delete_event"
     if any(keyword in text for keyword in ("已完成", "完成了", "写完了", "结束了", "搞定了", "标记为完成", "标记完成")):
         return "mark_completed"
+    if any(keyword.lower() in text.lower() for keyword in UPDATE_KEYWORDS):
+        return "update_event"
     return "add_event"
+
+
+def _build_update_result(text: str, now: datetime, result: dict) -> dict:
+    target_text, update_text = _split_update_command(text)
+    target_date_info = _parse_date(target_text, now)
+    target_start_time, target_end_time = _parse_time_range(target_text)
+    target_keyword = _extract_update_target(target_text)
+    if not target_keyword and not _has_update_values(update_text, now):
+        target_keyword = _extract_update_target(update_text)
+
+    update_date_info = _parse_date(update_text, now)
+    update_start_time, update_end_time = _parse_time_range(update_text)
+    update_start_time, update_end_time = _inherit_update_period(
+        update_start_time,
+        update_end_time,
+        target_start_time,
+    )
+    update_type = _detect_update_task_type(update_text)
+    deadline = _parse_update_deadline(text, update_text, now)
+    duration_minutes = _parse_duration_minutes(update_text)
+
+    if update_start_time and not update_end_time:
+        update_end_time = _add_minutes(update_start_time, 60)
+
+    updates = {
+        "type": update_type,
+        "date": update_date_info["date"] or (
+            target_date_info["date"] if update_start_time else None
+        ),
+        "start_time": update_start_time,
+        "end_time": update_end_time,
+        "deadline": _format_datetime(deadline),
+        "estimated_duration_minutes": duration_minutes,
+        "display_mode": DISPLAY_MODES_BY_TYPE.get(update_type),
+    }
+    updates = {key: value for key, value in updates.items() if value is not None}
+    result["target"] = {
+        "keyword": target_keyword,
+        "date": target_date_info["date"],
+        "start_time": target_start_time,
+        "end_time": target_end_time,
+    }
+    result["updates"] = updates
+    result["query"]["keyword"] = target_keyword
+    result["query"]["date"] = target_date_info["date"]
+
+    if not target_keyword:
+        return _with_clarification(result, "你想修改哪个任务？")
+    if not updates:
+        return _with_clarification(result, "你想修改任务的时间、截止时间，还是任务类型？")
+
+    result["response_text"] = (
+        "我理解你想修改任务，请在对应任务卡片中使用 "
+        "Edit time / Edit deadline / Edit type 按钮完成修改。"
+    )
+    return result
+
+
+def _split_update_command(text: str) -> tuple[str, str]:
+    pattern = "|".join(re.escape(keyword) for keyword in UPDATE_KEYWORDS)
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return text, ""
+    return text[:match.start()], text[match.end():]
+
+
+def _extract_update_target(text: str) -> str:
+    target = _extract_title(text, "update_event")
+    target = re.sub(r"^(?:(?:请|帮我|把|将|那个|这个)\s*)+", "", target)
+    target = re.sub(r"^(早上|中午|傍晚|夜间)", "", target)
+    target = re.sub(r"(截止时间|提交时间|时间|任务|日程|一下)$", "", target)
+    return target.strip(" ，,。的")
+
+
+def _has_update_values(text: str, now: datetime) -> bool:
+    return bool(
+        _parse_date(text, now)["date"]
+        or _parse_time_range(text)[0]
+        or _detect_update_task_type(text)
+        or _parse_duration_minutes(text)
+    )
+
+
+def _inherit_update_period(
+    start_time: str | None,
+    end_time: str | None,
+    target_start_time: str | None,
+) -> tuple[str | None, str | None]:
+    if not start_time or not target_start_time:
+        return start_time, end_time
+    target_hour, _ = _split_time(target_start_time)
+    start_hour, start_minute = _split_time(start_time)
+    if target_hour >= 12 and start_hour < 12:
+        start_time = _format_time(start_hour + 12, start_minute)
+        if end_time:
+            end_hour, end_minute = _split_time(end_time)
+            if end_hour < 12:
+                end_time = _format_time(end_hour + 12, end_minute)
+    return start_time, end_time
+
+
+def _detect_update_task_type(text: str) -> str | None:
+    if any(keyword in text for keyword in ("固定时间任务", "固定任务")):
+        return "fixed_event"
+    if any(keyword in text for keyword in ("截止任务", "deadline任务")):
+        return "deadline_task"
+    if any(keyword in text for keyword in ("必须做", "必需任务", "生活任务")):
+        return "essential_task"
+    if any(keyword in text for keyword in ("弹性任务", "待办")):
+        return "flexible_plan"
+    return None
+
+
+def _parse_update_deadline(text: str, update_text: str, now: datetime) -> datetime | None:
+    if not any(keyword in text.lower() for keyword in ("截止", "deadline", "提交时间")):
+        return None
+
+    date_info = _parse_date(update_text, now)
+    parsed_time, _ = _parse_time_range(update_text)
+    if not date_info["date"] and not date_info["preferred_time_window"] and not parsed_time:
+        return None
+
+    parsed_deadline = _parse_deadline(update_text, now)
+    if parsed_deadline:
+        return parsed_deadline
+
+    deadline_date = (
+        datetime.fromisoformat(date_info["date"]).date()
+        if date_info["date"]
+        else now.date()
+    )
+    if parsed_time:
+        hour, minute = _split_time(parsed_time)
+        return datetime.combine(deadline_date, time(hour, minute))
+    if date_info["preferred_time_window"] == "evening":
+        return datetime.combine(deadline_date, time(23, 0))
+    if date_info["date"]:
+        return datetime.combine(deadline_date, time(23, 59))
+    return None
 
 
 def _detect_task_type(
@@ -464,7 +625,8 @@ def _parse_reason(intent: str) -> str:
         "query_schedule": "包含查询表达，因此优先识别为 query_schedule",
         "delete_event": "包含删除或取消表达，因此识别为 delete_event",
         "mark_completed": "包含完成表达，因此识别为 mark_completed",
-        "add_event": "未命中查询、删除或完成表达，因此识别为 add_event",
+        "update_event": "包含修改或调整表达，因此识别为 update_event",
+        "add_event": "未命中查询、删除、完成或修改表达，因此识别为 add_event",
     }
     return reasons[intent]
 

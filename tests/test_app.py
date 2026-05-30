@@ -244,3 +244,19 @@ def test_tts_failure_keeps_text_reply_visible():
 
     assert len(app.exception) == 0
     assert any(item.value == "已添加算法面试。" for item in app.info)
+
+
+def test_update_event_does_not_enter_add_confirmation(monkeypatch):
+    completed_messages = []
+
+    monkeypatch.setattr(
+        app_module,
+        "create_pending_action",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not add pending action")),
+    )
+    monkeypatch.setattr(app_module, "_complete_voice_round", completed_messages.append)
+
+    app_module._handle_command("把洗衣服改到明天")
+
+    assert completed_messages
+    assert "Edit time / Edit deadline / Edit type" in completed_messages[0]

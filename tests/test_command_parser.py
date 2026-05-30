@@ -147,3 +147,85 @@ def test_parse_command_returns_confidence_and_reason():
 
     assert 0 <= result["confidence"] <= 1
     assert result["parse_reason"]
+
+
+def test_update_fixed_event_time_inherits_target_date_and_period():
+    result = parse_command("把明天下午三点的面试改到四点", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["target"]["keyword"] == "面试"
+    assert result["updates"]["date"] == "2026-05-30"
+    assert result["updates"]["start_time"] == "16:00"
+    assert result["updates"]["end_time"] == "17:00"
+
+
+def test_update_fixed_event_with_new_date_and_time_range():
+    result = parse_command("把算法面试改成明天下午四点到五点", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["target"]["keyword"] == "算法面试"
+    assert result["updates"]["date"] == "2026-05-30"
+    assert result["updates"]["start_time"] == "16:00"
+    assert result["updates"]["end_time"] == "17:00"
+
+
+def test_update_deadline_task_with_weekday_deadline():
+    result = parse_command("把报告截止时间改到周五晚上十一点", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["target"]["keyword"] == "报告"
+    assert result["updates"]["deadline"] == "2026-06-05T23:00:00"
+
+
+def test_update_deadline_task_with_tomorrow_evening_deadline():
+    result = parse_command("把作业 deadline 改成明晚", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["target"]["keyword"] == "作业"
+    assert result["updates"]["deadline"] == "2026-05-30T23:00:00"
+
+
+def test_update_task_type():
+    flexible = parse_command("把洗衣服改成弹性任务", now=NOW)
+    essential = parse_command("把刷题改成今天必须做", now=NOW)
+    deadline = parse_command("把报告改成截止任务", now=NOW)
+
+    assert flexible["intent"] == "update_event"
+    assert flexible["updates"]["type"] == "flexible_plan"
+    assert flexible["updates"]["display_mode"] == "todo_pool"
+    assert essential["intent"] == "update_event"
+    assert essential["updates"]["type"] == "essential_task"
+    assert essential["updates"]["display_mode"] == "essential_bar"
+    assert deadline["updates"]["type"] == "deadline_task"
+    assert "deadline" not in deadline["updates"]
+
+
+def test_update_essential_task_date():
+    result = parse_command("把洗衣服改到明天", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["target"]["keyword"] == "洗衣服"
+    assert result["updates"]["date"] == "2026-05-30"
+
+
+def test_update_without_change_details_requests_clarification():
+    result = parse_command("改一下报告", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["need_clarification"] is True
+    assert result["clarification_question"] == "你想修改任务的时间、截止时间，还是任务类型？"
+
+
+def test_update_without_target_requests_clarification():
+    result = parse_command("把那个任务改一下", now=NOW)
+
+    assert result["intent"] == "update_event"
+    assert result["need_clarification"] is True
+    assert result["clarification_question"] == "你想修改哪个任务？"
+
+
+def test_update_event_returns_confidence_and_reason():
+    result = parse_command("把洗衣服改到明天", now=NOW)
+
+    assert 0 <= result["confidence"] <= 1
+    assert result["parse_reason"]
