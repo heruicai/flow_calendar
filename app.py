@@ -61,8 +61,9 @@ def main() -> None:
     with right:
         st.subheader("Flexible Task Pool")
         _render_flexible_pool(tasks)
-        st.subheader("Final Response")
+        st.subheader("Assistant Text Reply")
         st.info(st.session_state.system_response)
+        st.subheader("Assistant Voice Reply")
         _render_voice_reply("final_response")
 
 
@@ -159,7 +160,9 @@ def _render_voice_command_step() -> None:
 def _render_confirmation_step() -> None:
     st.markdown("#### 2. Confirm the pending change")
     prompt = st.session_state.system_response
+    st.markdown("##### Assistant Text Reply")
     st.warning(prompt)
+    st.markdown("##### Assistant Voice Reply")
     _render_voice_reply("confirmation_prompt")
 
     audio_file = st.audio_input(
@@ -288,7 +291,6 @@ def _render_voice_reply(render_location: str) -> None:
         st.caption("等待语音回复。")
         return
 
-    st.write(voice_reply.get("spoken_text") or "")
     audio_path = voice_reply.get("audio_path")
     if voice_reply.get("success") and audio_path and Path(audio_path).exists():
         # Streamlit 1.58 st.audio has no key parameter. A stable per-location
