@@ -4,7 +4,7 @@ from inspect import getsource
 from streamlit.testing.v1 import AppTest
 
 import app as app_module
-from app import _task_action_specs, main
+from app import _render_page_styles, _task_action_specs, main
 
 
 def test_page_has_one_primary_voice_input_area():
@@ -23,6 +23,16 @@ def test_main_uses_compact_two_column_layout_with_task_panels_on_left():
     assert source.index('with left:') < source.index('with st.expander("Flexible Task Pool"')
     assert source.index('with st.expander("Flexible Task Pool"') < source.index('with right:')
     assert source.index('with st.expander("Assistant Reply"') < source.index('with right:')
+
+
+def test_title_and_subtitle_keep_visible_compact_spacing():
+    main_source = getsource(main)
+    style_source = getsource(_render_page_styles)
+
+    assert 'st.title("FlowCal")' in main_source
+    assert 'st.caption("Voice-first visual calendar assistant")' in main_source
+    assert "line-height: 1.25 !important;" in style_source
+    assert "overflow: visible !important;" in style_source
 
 
 def test_task_action_specs_bind_unique_keys_to_each_task_id():

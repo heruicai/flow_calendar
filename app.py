@@ -71,14 +71,17 @@ def _render_page_styles() -> None:
         <style>
         .block-container {
             max-width: 1680px;
-            padding-top: 0.65rem;
+            padding-top: 0.9rem;
             padding-left: 2rem;
             padding-right: 2rem;
             padding-bottom: 1rem;
         }
         h1 {
             font-size: 1.8rem !important;
+            line-height: 1.25 !important;
+            padding-top: 0.1rem !important;
             margin-bottom: 0 !important;
+            overflow: visible !important;
         }
         h2, h3, h4, h5 {
             margin-top: 0.35rem !important;
