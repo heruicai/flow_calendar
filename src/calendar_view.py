@@ -5,6 +5,7 @@ from __future__ import annotations
 import calendar
 from datetime import date, datetime
 from html import escape
+from typing import Callable
 
 import streamlit as st
 
@@ -202,7 +203,11 @@ def render_month_calendar(
     return clicked_date
 
 
-def render_day_timeline(tasks: list, selected_date: str) -> None:
+def render_day_timeline(
+    tasks: list,
+    selected_date: str,
+    action_renderer: Callable[[dict], None] | None = None,
+) -> None:
     """Render the selected day's fixed, deadline, and essential timeline."""
     _render_calendar_styles()
     entries = build_day_timeline(tasks, selected_date)
@@ -217,6 +222,8 @@ def render_day_timeline(tasks: list, selected_date: str) -> None:
 
     for entry in entries:
         st.markdown(render_timeline_entry_html(entry), unsafe_allow_html=True)
+        if action_renderer:
+            action_renderer(entry["task"])
 
 
 def render_calendar_day(tasks: list[dict], selected_date: str) -> None:
@@ -345,12 +352,12 @@ def _render_calendar_styles() -> None:
         """
         <style>
         .flowcal-month-cell {
-            min-height: 112px;
+            min-height: 84px;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
-            padding: 8px;
+            padding: 6px;
             background: #ffffff;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .flowcal-month-cell-selected {
             border: 2px solid #111827;
@@ -362,7 +369,7 @@ def _render_calendar_styles() -> None:
         .flowcal-month-day {
             font-weight: 700;
             color: #111827;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
         .flowcal-month-chips {
             display: flex;
@@ -373,7 +380,7 @@ def _render_calendar_styles() -> None:
             color: #ffffff;
             border-radius: 999px;
             padding: 2px 6px;
-            font-size: 11px;
+            font-size: 12px;
             line-height: 1.4;
         }
         .flowcal-empty-chip {
@@ -385,8 +392,8 @@ def _render_calendar_styles() -> None:
             border: 1px solid var(--border);
             border-left-width: 5px;
             border-radius: 8px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
+            padding: 8px 10px;
+            margin-bottom: 6px;
             background: var(--background);
         }
         .flowcal-card-title {
