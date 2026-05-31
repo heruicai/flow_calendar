@@ -124,8 +124,9 @@ Open the local URL shown by Streamlit and allow microphone access in the browser
 The default voice path is local and free: it does not upload audio or call a paid speech API. Settings are optional environment variables:
 
 ```powershell
-$env:VOICE_ASR_ENGINE="whisper"
-$env:VOICE_ASR_MODEL="base"
+$env:VOICE_ASR_ENGINE="sensevoice"
+$env:VOICE_ASR_MODEL="iic/SenseVoiceSmall"
+$env:VOICE_WHISPER_MODEL="large-v3-turbo"
 $env:VOICE_ASR_DEVICE="cpu"
 $env:VOICE_ASR_COMPUTE_TYPE="int8"
 $env:VOICE_ASR_LANGUAGE="zh"
@@ -145,13 +146,26 @@ $env:VOICE_AUTO_EXECUTE_THRESHOLD="0.88"
 $env:VOICE_CONFIRM_MARGIN_THRESHOLD="0.12"
 $env:VOICE_REJECT_AUDIO_QUALITY_THRESHOLD="0.35"
 $env:VOICE_SAVE_RAW_AUDIO="0"
+$env:VOICE_ENABLE_ASR_DIAGNOSTICS="1"
 ```
 
 See [`docs/local_voice_understanding_engine.md`](docs/local_voice_understanding_engine.md)
 for architecture, traces, local SenseVoice/FunASR opt-in behavior, privacy, and
 test commands.
 
-`VOICE_ASR_ENGINE=funasr` or `sensevoice` enables the optional local adapter when its package and model are installed. If that optional package is absent, FlowCal falls back to the existing local Whisper path. Models remain lazy-loaded, so importing the application does not download or initialize a large model.
+The Chinese voice path prefers local SenseVoice/FunASR and uses
+`faster-whisper large-v3-turbo` as its local fallback. Install the optional
+SenseVoice/FunASR runtime with `pip install funasr modelscope`. If it is absent,
+FlowCal shows an installation hint and falls back to Whisper. Models remain
+lazy-loaded, so importing the application and running tests do not download or
+initialize weights.
+
+Each recognition prints a `[flowcal-asr]` JSON diagnostic line with engine,
+model, language, beam size, VAD, prompt injection, audio duration, raw ASR text,
+and fallback text. Add private local WAV regression cases under
+`examples/voice_samples/` and run `python scripts/voice_samples_regression.py`
+to validate the manifest without loading models. Use `--run-local-asr` only
+after preparing local model files.
 
 The old fixed typo map remains only as a compatibility fallback for a few recurring ASR mistakes. It is no longer the primary correction strategy. The postprocessor now builds vocabulary from local tasks, converts Traditional Chinese to Simplified Chinese, normalizes full-width text, compares contextual candidates, reranks ASR hypotheses, and flags uncertain corrections for confirmation. False corrections can still occur for short ambiguous phrases, unusual names not present in local context, and noisy recordings.
 

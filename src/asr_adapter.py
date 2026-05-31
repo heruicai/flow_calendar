@@ -18,6 +18,17 @@ class ASRCandidate:
     source: str = "unknown"
 
 
+class OptionalASRDependencyError(ModuleNotFoundError):
+    """Explain how to enable an optional local ASR engine."""
+
+    def __init__(self, engine: str):
+        self.engine = engine
+        super().__init__(
+            f"Local {engine} dependencies are missing. Install with: "
+            "pip install funasr modelscope"
+        )
+
+
 class BaseASRAdapter:
     """Base interface implemented by local ASR engines."""
 
@@ -39,6 +50,7 @@ class WhisperASRAdapter(BaseASRAdapter):
             "language": self.config.language,
             "vad_filter": True,
             "beam_size": 5,
+            "temperature": 0,
             "initial_prompt": prompt or None,
             "hotwords": " ".join(hotwords or []) or None,
         }
@@ -52,12 +64,12 @@ class WhisperASRAdapter(BaseASRAdapter):
         return [ASRCandidate(text=text, confidence=confidence, source="whisper")]
 
     def _get_model(self):
-        key = (self.config.asr_model, self.config.device, self.config.compute_type)
+        key = (self.config.whisper_model, self.config.device, self.config.compute_type)
         if key not in self._models:
             from faster_whisper import WhisperModel
 
             self._models[key] = WhisperModel(
-                self.config.asr_model,
+                self.config.whisper_model,
                 device=self.config.device,
                 compute_type=self.config.compute_type,
             )
@@ -66,6 +78,8 @@ class WhisperASRAdapter(BaseASRAdapter):
 
 class FunASRAdapter(BaseASRAdapter):
     """Optional local FunASR adapter. Import and model download remain opt-in."""
+
+    engine_name = "FunASR"
 
     def __init__(self, config: VoiceConfig):
         self.config = config
@@ -79,7 +93,10 @@ class FunASRAdapter(BaseASRAdapter):
 
     def _get_model(self):
         if self._model is None:
-            from funasr import AutoModel
+            try:
+                from funasr import AutoModel
+            except ModuleNotFoundError as exc:
+                raise OptionalASRDependencyError(self.engine_name) from exc
 
             self._model = AutoModel(model=self.config.asr_model)
         return self._model
@@ -87,6 +104,8 @@ class FunASRAdapter(BaseASRAdapter):
 
 class SenseVoiceASRAdapter(FunASRAdapter):
     """Optional local SenseVoice adapter with an explicit opt-in engine name."""
+
+    engine_name = "SenseVoice"
 
     def transcribe(self, audio_path, *, prompt: str = "", hotwords: list[str] | None = None) -> list[ASRCandidate]:
         model = self._get_model()

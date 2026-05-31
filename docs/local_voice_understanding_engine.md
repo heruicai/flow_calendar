@@ -41,7 +41,9 @@ question. Empty, unreadable, or clearly unsuitable audio is rejected early.
 Defaults:
 
 ```text
-VOICE_ASR_ENGINE=whisper
+VOICE_ASR_ENGINE=sensevoice
+VOICE_ASR_MODEL=iic/SenseVoiceSmall
+VOICE_WHISPER_MODEL=large-v3-turbo
 VOICE_ALLOW_CLOUD=0
 VOICE_ENABLE_TRACE=1
 VOICE_TRACE_DIR=outputs/voice_traces
@@ -49,13 +51,27 @@ VOICE_AUTO_EXECUTE_THRESHOLD=0.88
 VOICE_CONFIRM_MARGIN_THRESHOLD=0.12
 VOICE_REJECT_AUDIO_QUALITY_THRESHOLD=0.35
 VOICE_SAVE_RAW_AUDIO=0
+VOICE_ENABLE_ASR_DIAGNOSTICS=1
 ```
 
-`VOICE_ASR_ENGINE=funasr` enables local FunASR when its optional dependency and
-model are already installed. `VOICE_ASR_ENGINE=sensevoice` enables the separate
-local SenseVoice adapter under the same explicit opt-in rule. Missing optional
-dependencies fall back to local Whisper. Tests use `MockASRAdapter` and never
-download model weights.
+The default Chinese path tries local SenseVoice first and compares its output
+with local `faster-whisper large-v3-turbo`. `VOICE_ASR_ENGINE=funasr` selects
+the local FunASR adapter. Install optional dependencies with:
+
+```powershell
+pip install funasr modelscope
+```
+
+Missing optional dependencies produce an installation hint and fall back to
+local Whisper. Whisper uses `language="zh"`, `beam_size=5`, `temperature=0`,
+`vad_filter=True`, and a dynamic local prompt built from task titles and
+calendar vocabulary. Tests use `MockASRAdapter` and never download weights.
+
+Every recognition prints a `[flowcal-asr]` JSON line containing engine, model,
+language, beam size, VAD state, prompt injection state, audio duration, raw
+text, and fallback text. When independent ASR outputs diverge, or only one
+candidate yields a complete calendar frame, the risk policy requires
+confirmation.
 
 The existing GLM semantic parser remains a legacy optional path for typed
 commands. The productized voice understanding pipeline does not invoke it, even
@@ -87,6 +103,17 @@ python scripts/voice_pipeline_smoke_test.py
 
 The suite uses fake ASR candidates, covers more than 80 local text cases, and
 fails if the product voice pipeline attempts to use the legacy cloud parser.
+
+Real local audio regression is opt-in:
+
+```powershell
+python scripts/voice_samples_regression.py
+python scripts/voice_samples_regression.py --run-local-asr
+```
+
+The first command validates `examples/voice_samples/manifest.json` without
+loading models. The second command runs installed local models after their
+files have been prepared locally.
 
 ## Push the feature branch
 

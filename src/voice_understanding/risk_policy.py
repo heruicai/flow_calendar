@@ -5,7 +5,7 @@ from __future__ import annotations
 from src.voice_understanding.schema import AudioQuality, TextHypothesis, VoiceDecision
 
 
-def decide(hypotheses: list[TextHypothesis], audio_quality: AudioQuality, *, execute_threshold: float = 0.88, margin_threshold: float = 0.12) -> VoiceDecision:
+def decide(hypotheses: list[TextHypothesis], audio_quality: AudioQuality, *, execute_threshold: float = 0.88, margin_threshold: float = 0.12, force_confirmation_reason: str = "") -> VoiceDecision:
     if not audio_quality.acceptable:
         return VoiceDecision("reject", audio_quality.reason)
     if not hypotheses or hypotheses[0].semantic_frame is None:
@@ -17,6 +17,8 @@ def decide(hypotheses: list[TextHypothesis], audio_quality: AudioQuality, *, exe
         return VoiceDecision("clarify", "missing_or_ambiguous_fields", clarification_question=question)
     if frame.intent in {"delete_event", "update_event", "mark_completed"}:
         return VoiceDecision("confirm", f"{frame.intent}_requires_confirmation", _confirmation_prompt(frame))
+    if force_confirmation_reason:
+        return VoiceDecision("confirm", force_confirmation_reason, _confirmation_prompt(frame))
     margin = top.scores.get("final", 0.0) - (hypotheses[1].scores.get("final", 0.0) if len(hypotheses) > 1 else 0.0)
     if top.expansions:
         return VoiceDecision("confirm", "expanded_hypothesis_requires_confirmation", _confirmation_prompt(frame))

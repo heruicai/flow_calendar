@@ -75,6 +75,9 @@ class VoiceUnderstandingResult:
     audio_quality: AudioQuality
     decision: VoiceDecision
     top_hypotheses: list[TextHypothesis] = field(default_factory=list)
+    asr_diagnostics: list[dict[str, Any]] = field(default_factory=list)
+    asr_comparison: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def best(self) -> TextHypothesis | None:

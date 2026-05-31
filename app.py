@@ -162,6 +162,8 @@ def _render_voice_conversation() -> None:
             decision = asr_result.get("decision") or {}
             st.caption(f"Voice decision: {decision.get('action', 'unknown')}")
             st.caption(f"Trace ID: {asr_result.get('trace_id', '')}")
+            for warning in asr_result.get("warnings") or []:
+                st.warning(warning)
             if _voice_debug_enabled() and asr_result.get("top_hypotheses"):
                 st.markdown("##### Local understanding hypotheses")
                 st.json(asr_result["top_hypotheses"])

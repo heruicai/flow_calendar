@@ -10,8 +10,9 @@ from dataclasses import dataclass
 class VoiceConfig:
     """Runtime options with local, no-cost defaults."""
 
-    asr_engine: str = "whisper"
-    asr_model: str = "base"
+    asr_engine: str = "sensevoice"
+    asr_model: str = "iic/SenseVoiceSmall"
+    whisper_model: str = "large-v3-turbo"
     device: str = "cpu"
     compute_type: str = "int8"
     language: str = "zh"
@@ -31,13 +32,18 @@ class VoiceConfig:
     confirm_margin_threshold: float = 0.12
     reject_audio_quality_threshold: float = 0.35
     save_raw_audio: bool = False
+    enable_asr_diagnostics: bool = True
 
 
 def get_voice_config() -> VoiceConfig:
     """Read voice settings from environment variables."""
     return VoiceConfig(
-        asr_engine=os.getenv("VOICE_ASR_ENGINE", "whisper").strip().lower(),
-        asr_model=os.getenv("VOICE_ASR_MODEL", os.getenv("FLOWCAL_WHISPER_MODEL", "base")).strip(),
+        asr_engine=os.getenv("VOICE_ASR_ENGINE", "sensevoice").strip().lower(),
+        asr_model=os.getenv("VOICE_ASR_MODEL", "iic/SenseVoiceSmall").strip(),
+        whisper_model=os.getenv(
+            "VOICE_WHISPER_MODEL",
+            os.getenv("FLOWCAL_WHISPER_MODEL", "large-v3-turbo"),
+        ).strip(),
         device=os.getenv("VOICE_ASR_DEVICE", "cpu").strip(),
         compute_type=os.getenv("VOICE_ASR_COMPUTE_TYPE", "int8").strip(),
         language=os.getenv("VOICE_ASR_LANGUAGE", "zh").strip(),
@@ -57,6 +63,7 @@ def get_voice_config() -> VoiceConfig:
         confirm_margin_threshold=_read_float("VOICE_CONFIRM_MARGIN_THRESHOLD", 0.12),
         reject_audio_quality_threshold=_read_float("VOICE_REJECT_AUDIO_QUALITY_THRESHOLD", 0.35),
         save_raw_audio=_read_bool("VOICE_SAVE_RAW_AUDIO", False),
+        enable_asr_diagnostics=_read_bool("VOICE_ENABLE_ASR_DIAGNOSTICS", True),
     )
 
 

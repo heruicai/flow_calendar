@@ -45,5 +45,16 @@ def transcribe_audio(audio_path, *, tasks: list[dict] | None = None, adapter=Non
         "semantic_frame": asdict(frame) if frame else None,
         "top_hypotheses": [asdict(item) for item in understanding.top_hypotheses[:5]],
         "trace_id": understanding.trace_id,
+        "asr_diagnostics": understanding.asr_diagnostics,
+        "asr_comparison": understanding.asr_comparison,
+        "warnings": understanding.warnings,
+        "fallback_asr_text": next(
+            (
+                diagnostic["raw_asr_text"]
+                for diagnostic in understanding.asr_diagnostics
+                if diagnostic["engine"] == "whisper"
+            ),
+            "",
+        ),
         "candidates": [asdict(item) for item in understanding.top_hypotheses],
     }

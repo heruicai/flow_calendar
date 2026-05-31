@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from src.asr_adapter import ASRCandidate, WhisperASRAdapter, create_asr_adapter
+from src.asr_adapter import OptionalASRDependencyError, WhisperASRAdapter, create_asr_adapter
 from src.voice_config import get_voice_config
 from src.voice_understanding.audio_quality import inspect_audio_quality
+from src.voice_understanding.asr_comparison import compare_asr_candidates
+from src.voice_understanding.asr_diagnostics import build_asr_diagnostic, print_asr_diagnostic
 from src.voice_understanding.context import build_local_context
 from src.voice_understanding.hypothesis_expander import expand_hypotheses
 from src.voice_understanding.reranker import rank_hypotheses
@@ -21,17 +23,63 @@ def understand_voice(audio_path, tasks=None, config=None, adapter=None, *, check
     quality = inspect_audio_quality(audio_path, threshold=settings.reject_audio_quality_threshold) if check_audio else AudioQuality()
     trace_id = uuid4().hex
     if not quality.acceptable:
-        result = VoiceUnderstandingResult(trace_id, quality, decide([], quality))
+        diagnostic = build_asr_diagnostic(
+            engine=settings.asr_engine,
+            model=settings.asr_model,
+            language=settings.language,
+            audio_duration=quality.duration_seconds,
+            raw_text="",
+        )
+        if settings.enable_asr_diagnostics:
+            print_asr_diagnostic(diagnostic)
+        result = VoiceUnderstandingResult(trace_id, quality, decide([], quality), asr_diagnostics=[diagnostic])
         _maybe_trace(result, settings)
         return result
     context = build_local_context(tasks, max_terms=settings.max_context_terms)
     recognizer = adapter or create_asr_adapter(settings)
+    diagnostics = []
+    warnings = []
+    primary_candidates = []
+    fallback_candidates = []
     try:
-        candidates = recognizer.transcribe(audio_path, prompt=context["prompt"], hotwords=context["hotwords"])
-    except (ImportError, ModuleNotFoundError):
+        primary_candidates = recognizer.transcribe(audio_path, prompt=context["prompt"], hotwords=context["hotwords"])
+    except (ImportError, ModuleNotFoundError) as exc:
         if isinstance(recognizer, WhisperASRAdapter):
             raise
-        candidates = WhisperASRAdapter(settings).transcribe(audio_path, prompt=context["prompt"], hotwords=context["hotwords"])
+        warning = str(exc) or "Optional local ASR engine is unavailable."
+        warnings.append(warning)
+        fallback_candidates = WhisperASRAdapter(settings).transcribe(
+            audio_path,
+            prompt=context["prompt"],
+            hotwords=context["hotwords"],
+        )
+    primary_candidates = list(primary_candidates)
+    if adapter is None and not isinstance(recognizer, WhisperASRAdapter) and primary_candidates:
+        try:
+            fallback_candidates = WhisperASRAdapter(settings).transcribe(
+                audio_path,
+                prompt=context["prompt"],
+                hotwords=context["hotwords"],
+            )
+        except (ImportError, ModuleNotFoundError) as exc:
+            warnings.append(f"Local Whisper fallback is unavailable: {exc}")
+    candidates = [*primary_candidates, *fallback_candidates]
+    fallback_text = fallback_candidates[0].text if fallback_candidates else ""
+    for candidate in candidates:
+        model = settings.whisper_model if candidate.source == "whisper" else settings.asr_model
+        diagnostic = build_asr_diagnostic(
+            engine=candidate.source,
+            model=model,
+            language=settings.language,
+            audio_duration=quality.duration_seconds,
+            raw_text=candidate.text,
+            fallback_text=fallback_text,
+            prompt=context["prompt"],
+        )
+        diagnostics.append(diagnostic)
+        if settings.enable_asr_diagnostics:
+            print_asr_diagnostic(diagnostic)
+    comparison = compare_asr_candidates(candidates)
     hypotheses = []
     for candidate in candidates:
         confidence = 0.5 if candidate.confidence is None else float(candidate.confidence)
@@ -39,8 +87,14 @@ def understand_voice(audio_path, tasks=None, config=None, adapter=None, *, check
     for hypothesis in hypotheses:
         hypothesis.semantic_frame = parse_semantic_frame(hypothesis.text)
     ranked = rank_hypotheses(hypotheses, context_terms=context["terms"])
-    decision = decide(ranked, quality, execute_threshold=settings.auto_execute_threshold, margin_threshold=settings.confirm_margin_threshold)
-    result = VoiceUnderstandingResult(trace_id, quality, decision, ranked)
+    decision = decide(
+        ranked,
+        quality,
+        execute_threshold=settings.auto_execute_threshold,
+        margin_threshold=settings.confirm_margin_threshold,
+        force_confirmation_reason=comparison["reason"] if comparison.get("requires_confirmation") else "",
+    )
+    result = VoiceUnderstandingResult(trace_id, quality, decision, ranked, diagnostics, comparison, warnings)
     _maybe_trace(result, settings)
     return result
 
