@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+DEFAULT_SENSEVOICE_MODEL_PATH = str(
+    Path.home() / ".cache" / "modelscope" / "hub" / "models" / "iic" / "SenseVoiceSmall"
+)
 
 
 @dataclass(frozen=True)
@@ -12,7 +18,13 @@ class VoiceConfig:
 
     asr_engine: str = "sensevoice"
     asr_model: str = "iic/SenseVoiceSmall"
+    sensevoice_model_path: str = DEFAULT_SENSEVOICE_MODEL_PATH
+    sensevoice_allow_download: bool = False
+    enable_dual_asr: bool = False
+    asr_fallback_engine: str = "none"
     whisper_model: str = "large-v3-turbo"
+    whisper_model_path: str = ""
+    whisper_allow_download: bool = False
     device: str = "cpu"
     compute_type: str = "int8"
     language: str = "zh"
@@ -40,10 +52,19 @@ def get_voice_config() -> VoiceConfig:
     return VoiceConfig(
         asr_engine=os.getenv("VOICE_ASR_ENGINE", "sensevoice").strip().lower(),
         asr_model=os.getenv("VOICE_ASR_MODEL", "iic/SenseVoiceSmall").strip(),
+        sensevoice_model_path=os.getenv(
+            "VOICE_SENSEVOICE_MODEL_PATH",
+            DEFAULT_SENSEVOICE_MODEL_PATH,
+        ).strip(),
+        sensevoice_allow_download=_read_bool("VOICE_SENSEVOICE_ALLOW_DOWNLOAD", False),
+        enable_dual_asr=_read_bool("VOICE_ENABLE_DUAL_ASR", False),
+        asr_fallback_engine=os.getenv("VOICE_ASR_FALLBACK_ENGINE", "none").strip().lower(),
         whisper_model=os.getenv(
             "VOICE_WHISPER_MODEL",
             os.getenv("FLOWCAL_WHISPER_MODEL", "large-v3-turbo"),
         ).strip(),
+        whisper_model_path=os.getenv("VOICE_WHISPER_MODEL_PATH", "").strip(),
+        whisper_allow_download=_read_bool("VOICE_WHISPER_ALLOW_DOWNLOAD", False),
         device=os.getenv("VOICE_ASR_DEVICE", "cpu").strip(),
         compute_type=os.getenv("VOICE_ASR_COMPUTE_TYPE", "int8").strip(),
         language=os.getenv("VOICE_ASR_LANGUAGE", "zh").strip(),

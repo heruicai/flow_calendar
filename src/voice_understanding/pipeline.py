@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from src.asr_adapter import OptionalASRDependencyError, WhisperASRAdapter, create_asr_adapter
+from src.asr_adapter import LocalASRModelError, WhisperASRAdapter, create_asr_adapter
 from src.voice_config import get_voice_config
 from src.voice_understanding.audio_quality import inspect_audio_quality
 from src.voice_understanding.asr_comparison import compare_asr_candidates
@@ -29,6 +29,9 @@ def understand_voice(audio_path, tasks=None, config=None, adapter=None, *, check
             language=settings.language,
             audio_duration=quality.duration_seconds,
             raw_text="",
+            model_path=settings.sensevoice_model_path if settings.asr_engine == "sensevoice" else "",
+            enable_dual_asr=settings.enable_dual_asr,
+            fallback_engine=settings.asr_fallback_engine,
         )
         if settings.enable_asr_diagnostics:
             print_asr_diagnostic(diagnostic)
@@ -43,38 +46,41 @@ def understand_voice(audio_path, tasks=None, config=None, adapter=None, *, check
     fallback_candidates = []
     try:
         primary_candidates = recognizer.transcribe(audio_path, prompt=context["prompt"], hotwords=context["hotwords"])
-    except (ImportError, ModuleNotFoundError) as exc:
+    except (ImportError, ModuleNotFoundError, LocalASRModelError) as exc:
         if isinstance(recognizer, WhisperASRAdapter):
             raise
         warning = str(exc) or "Optional local ASR engine is unavailable."
         warnings.append(warning)
-        fallback_candidates = WhisperASRAdapter(settings).transcribe(
-            audio_path,
-            prompt=context["prompt"],
-            hotwords=context["hotwords"],
-        )
-    primary_candidates = list(primary_candidates)
-    if adapter is None and not isinstance(recognizer, WhisperASRAdapter) and primary_candidates:
-        try:
-            fallback_candidates = WhisperASRAdapter(settings).transcribe(
-                audio_path,
-                prompt=context["prompt"],
-                hotwords=context["hotwords"],
+        if _whisper_fallback_enabled(settings):
+            fallback_candidates = _transcribe_whisper_fallback(audio_path, context, settings, warnings)
+        else:
+            diagnostic = _build_candidate_diagnostic(
+                settings=settings,
+                quality=quality,
+                candidate=None,
+                warning=warning,
             )
-        except (ImportError, ModuleNotFoundError) as exc:
-            warnings.append(f"Local Whisper fallback is unavailable: {exc}")
+            if settings.enable_asr_diagnostics:
+                print_asr_diagnostic(diagnostic)
+            raise
+    primary_candidates = list(primary_candidates)
+    if (
+        adapter is None
+        and not isinstance(recognizer, WhisperASRAdapter)
+        and primary_candidates
+        and _whisper_fallback_enabled(settings)
+    ):
+        fallback_candidates = _transcribe_whisper_fallback(audio_path, context, settings, warnings)
     candidates = [*primary_candidates, *fallback_candidates]
     fallback_text = fallback_candidates[0].text if fallback_candidates else ""
     for candidate in candidates:
-        model = settings.whisper_model if candidate.source == "whisper" else settings.asr_model
-        diagnostic = build_asr_diagnostic(
-            engine=candidate.source,
-            model=model,
-            language=settings.language,
-            audio_duration=quality.duration_seconds,
-            raw_text=candidate.text,
+        diagnostic = _build_candidate_diagnostic(
+            settings=settings,
+            quality=quality,
+            candidate=candidate,
             fallback_text=fallback_text,
             prompt=context["prompt"],
+            fallback_used=bool(fallback_candidates),
         )
         diagnostics.append(diagnostic)
         if settings.enable_asr_diagnostics:
@@ -102,3 +108,54 @@ def understand_voice(audio_path, tasks=None, config=None, adapter=None, *, check
 def _maybe_trace(result, settings):
     if settings.enable_trace:
         write_trace(result, settings.trace_dir)
+
+
+def _whisper_fallback_enabled(settings) -> bool:
+    return settings.enable_dual_asr and settings.asr_fallback_engine == "whisper"
+
+
+def _transcribe_whisper_fallback(audio_path, context, settings, warnings):
+    try:
+        return WhisperASRAdapter(settings).transcribe(
+            audio_path,
+            prompt=context["prompt"],
+            hotwords=context["hotwords"],
+        )
+    except (ImportError, ModuleNotFoundError, LocalASRModelError) as exc:
+        warnings.append(f"Local Whisper fallback skipped: {exc}")
+        return []
+
+
+def _build_candidate_diagnostic(
+    *,
+    settings,
+    quality,
+    candidate,
+    fallback_text="",
+    prompt="",
+    fallback_used=False,
+    warning="",
+):
+    engine = candidate.source if candidate else settings.asr_engine
+    return build_asr_diagnostic(
+        engine=engine,
+        model=settings.whisper_model if engine == "whisper" else settings.asr_model,
+        model_path=(
+            settings.whisper_model_path
+            if engine == "whisper"
+            else settings.sensevoice_model_path
+            if engine == "sensevoice"
+            else ""
+        ),
+        language=settings.language,
+        audio_duration=quality.duration_seconds,
+        raw_text=(candidate.raw_text or candidate.text) if candidate else "",
+        cleaned_text=candidate.text if candidate else "",
+        metadata_tags_removed=candidate.metadata_tags_removed if candidate else (),
+        fallback_text=fallback_text,
+        prompt=prompt,
+        enable_dual_asr=settings.enable_dual_asr,
+        fallback_engine=settings.asr_fallback_engine,
+        fallback_used=fallback_used,
+        warning=warning,
+    )

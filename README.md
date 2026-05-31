@@ -48,7 +48,7 @@ FlowCal uses a push-to-talk voice conversation as the primary flow:
 5. Confirmed changes are written to the local task store and the final result is spoken aloud.
 6. Schedule queries return concrete task details immediately in text and speech without a confirmation round.
 
-`pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The first ASR run downloads the selected Whisper model if it is not already cached; after that, transcription runs locally. Text command input remains available as a fallback.
+`pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The default Chinese ASR path loads a locally prepared SenseVoiceSmall model. It does not download Whisper automatically. Text command input remains available as a fallback.
 
 ## 6. Calendar Visualization Design
 
@@ -126,7 +126,13 @@ The default voice path is local and free: it does not upload audio or call a pai
 ```powershell
 $env:VOICE_ASR_ENGINE="sensevoice"
 $env:VOICE_ASR_MODEL="iic/SenseVoiceSmall"
+$env:VOICE_SENSEVOICE_MODEL_PATH="$HOME\.cache\modelscope\hub\models\iic\SenseVoiceSmall"
+$env:VOICE_SENSEVOICE_ALLOW_DOWNLOAD="0"
+$env:VOICE_ENABLE_DUAL_ASR="0"
+$env:VOICE_ASR_FALLBACK_ENGINE="none"
 $env:VOICE_WHISPER_MODEL="large-v3-turbo"
+$env:VOICE_WHISPER_MODEL_PATH=""
+$env:VOICE_WHISPER_ALLOW_DOWNLOAD="0"
 $env:VOICE_ASR_DEVICE="cpu"
 $env:VOICE_ASR_COMPUTE_TYPE="int8"
 $env:VOICE_ASR_LANGUAGE="zh"
@@ -153,12 +159,17 @@ See [`docs/local_voice_understanding_engine.md`](docs/local_voice_understanding_
 for architecture, traces, local SenseVoice/FunASR opt-in behavior, privacy, and
 test commands.
 
-The Chinese voice path prefers local SenseVoice/FunASR and uses
-`faster-whisper large-v3-turbo` as its local fallback. Install the optional
-SenseVoice/FunASR runtime with `pip install funasr modelscope`. If it is absent,
-FlowCal shows an installation hint and falls back to Whisper. Models remain
-lazy-loaded, so importing the application and running tests do not download or
-initialize weights.
+The Chinese voice path prefers the local SenseVoiceSmall directory. Install the
+optional runtime with `pip install torch torchaudio funasr modelscope`. If the
+configured model directory is absent, FlowCal shows a preparation hint and does
+not download weights by default. Models remain lazy-loaded, so importing the
+application and running tests do not initialize weights.
+
+Whisper `large-v3-turbo` is retained as an explicit local fallback only. It is
+not loaded or downloaded by default. To enable it, set
+`VOICE_ENABLE_DUAL_ASR=1`, `VOICE_ASR_FALLBACK_ENGINE=whisper`, and either
+provide `VOICE_WHISPER_MODEL_PATH` or explicitly set
+`VOICE_WHISPER_ALLOW_DOWNLOAD=1`.
 
 Each recognition prints a `[flowcal-asr]` JSON diagnostic line with engine,
 model, language, beam size, VAD, prompt injection, audio duration, raw ASR text,
@@ -166,6 +177,9 @@ and fallback text. Add private local WAV regression cases under
 `examples/voice_samples/` and run `python scripts/voice_samples_regression.py`
 to validate the manifest without loading models. Use `--run-local-asr` only
 after preparing local model files.
+
+SenseVoice can read audio through `torchaudio` when ffmpeg is absent. Installing
+ffmpeg is still recommended for broader audio-format compatibility.
 
 The old fixed typo map remains only as a compatibility fallback for a few recurring ASR mistakes. It is no longer the primary correction strategy. The postprocessor now builds vocabulary from local tasks, converts Traditional Chinese to Simplified Chinese, normalizes full-width text, compares contextual candidates, reranks ASR hypotheses, and flags uncertain corrections for confirmation. False corrections can still occur for short ambiguous phrases, unusual names not present in local context, and noisy recordings.
 

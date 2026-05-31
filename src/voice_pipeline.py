@@ -23,15 +23,26 @@ def transcribe_audio(audio_path, *, tasks: list[dict] | None = None, adapter=Non
     if best is None:
         raise ValueError("No clear speech was recognized.")
     frame = best.semantic_frame
+    best_diagnostic = next(
+        (
+            diagnostic
+            for diagnostic in understanding.asr_diagnostics
+            if diagnostic["engine"] == best.source
+            and diagnostic["cleaned_text"] == best.source_text
+        ),
+        {},
+    )
     expansions = [asdict(item) for item in best.expansions]
     alternatives = [
         {"text": item.text, "score": item.scores.get("final", 0.0)}
         for item in understanding.top_hypotheses[1:4]
     ]
     return {
-        "raw_text": best.source_text,
+        "raw_text": best_diagnostic.get("raw_text", best.source_text),
         "normalized_text": best.source_text,
         "corrected_text": best.text,
+        "cleaned_text": best.source_text,
+        "metadata_tags_removed": best_diagnostic.get("metadata_tags_removed", []),
         "text": best.text,
         "mode": best.source,
         "confidence": best.scores.get("final", 0.0),
@@ -50,7 +61,7 @@ def transcribe_audio(audio_path, *, tasks: list[dict] | None = None, adapter=Non
         "warnings": understanding.warnings,
         "fallback_asr_text": next(
             (
-                diagnostic["raw_asr_text"]
+                diagnostic["cleaned_text"]
                 for diagnostic in understanding.asr_diagnostics
                 if diagnostic["engine"] == "whisper"
             ),

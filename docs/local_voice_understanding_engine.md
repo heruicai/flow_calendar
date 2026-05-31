@@ -43,7 +43,13 @@ Defaults:
 ```text
 VOICE_ASR_ENGINE=sensevoice
 VOICE_ASR_MODEL=iic/SenseVoiceSmall
+VOICE_SENSEVOICE_MODEL_PATH=C:\Users\xjy\.cache\modelscope\hub\models\iic\SenseVoiceSmall
+VOICE_SENSEVOICE_ALLOW_DOWNLOAD=0
+VOICE_ENABLE_DUAL_ASR=0
+VOICE_ASR_FALLBACK_ENGINE=none
 VOICE_WHISPER_MODEL=large-v3-turbo
+VOICE_WHISPER_MODEL_PATH=
+VOICE_WHISPER_ALLOW_DOWNLOAD=0
 VOICE_ALLOW_CLOUD=0
 VOICE_ENABLE_TRACE=1
 VOICE_TRACE_DIR=outputs/voice_traces
@@ -54,24 +60,42 @@ VOICE_SAVE_RAW_AUDIO=0
 VOICE_ENABLE_ASR_DIAGNOSTICS=1
 ```
 
-The default Chinese path tries local SenseVoice first and compares its output
-with local `faster-whisper large-v3-turbo`. `VOICE_ASR_ENGINE=funasr` selects
-the local FunASR adapter. Install optional dependencies with:
+The default Chinese path uses the prepared local SenseVoiceSmall directory.
+SenseVoice metadata tags such as `<|zh|>` and `<|NEUTRAL|>` are removed before
+semantic parsing while the original tagged text remains available in trace
+diagnostics. `VOICE_ASR_ENGINE=funasr` selects the local FunASR adapter. Install
+optional dependencies with:
 
 ```powershell
-pip install funasr modelscope
+pip install torch torchaudio funasr modelscope
 ```
 
-Missing optional dependencies produce an installation hint and fall back to
-local Whisper. Whisper uses `language="zh"`, `beam_size=5`, `temperature=0`,
-`vad_filter=True`, and a dynamic local prompt built from task titles and
-calendar vocabulary. Tests use `MockASRAdapter` and never download weights.
+Missing optional dependencies or a missing local SenseVoice directory produce
+a preparation hint. Nothing is downloaded by default.
+
+Whisper `large-v3-turbo` remains available as an explicit fallback. Enable it
+only with:
+
+```powershell
+$env:VOICE_ENABLE_DUAL_ASR="1"
+$env:VOICE_ASR_FALLBACK_ENGINE="whisper"
+$env:VOICE_WHISPER_MODEL_PATH="D:\models\large-v3-turbo"
+```
+
+Alternatively, explicitly set `VOICE_WHISPER_ALLOW_DOWNLOAD=1` to allow
+`faster-whisper` to fetch the configured model. Whisper uses `language="zh"`,
+`beam_size=5`, `temperature=0`, `vad_filter=True`, and a dynamic local prompt.
+Tests use `MockASRAdapter` and never download weights.
 
 Every recognition prints a `[flowcal-asr]` JSON line containing engine, model,
 language, beam size, VAD state, prompt injection state, audio duration, raw
-text, and fallback text. When independent ASR outputs diverge, or only one
-candidate yields a complete calendar frame, the risk policy requires
-confirmation.
+text, cleaned text, removed tags, local model path, torchaudio availability,
+ffmpeg availability, dual-ASR state, and fallback state. When explicitly
+enabled independent ASR outputs diverge, or only one candidate yields a
+complete calendar frame, the risk policy requires confirmation.
+
+SenseVoice can use `torchaudio` when ffmpeg is absent. Installing ffmpeg remains
+recommended for wider audio-format compatibility.
 
 The existing GLM semantic parser remains a legacy optional path for typed
 commands. The productized voice understanding pipeline does not invoke it, even

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from inspect import signature
+from pathlib import Path
 from typing import Any
 
 from src.voice_config import VoiceConfig
@@ -16,6 +18,8 @@ class ASRCandidate:
     text: str
     confidence: float | None = None
     source: str = "unknown"
+    raw_text: str | None = None
+    metadata_tags_removed: tuple[str, ...] = ()
 
 
 class OptionalASRDependencyError(ModuleNotFoundError):
@@ -27,6 +31,23 @@ class OptionalASRDependencyError(ModuleNotFoundError):
             f"Local {engine} dependencies are missing. Install with: "
             "pip install funasr modelscope"
         )
+
+
+class LocalASRModelError(RuntimeError):
+    """Explain how to prepare an opt-in local model without silent downloads."""
+
+
+SENSEVOICE_TAG_PATTERN = re.compile(r"<\|([^|>]+)\|>")
+
+
+def clean_sensevoice_text(text: str) -> str:
+    """Remove arbitrary SenseVoice metadata tags from natural-language text."""
+    return SENSEVOICE_TAG_PATTERN.sub("", str(text or "")).strip()
+
+
+def get_sensevoice_metadata_tags(text: str) -> tuple[str, ...]:
+    """Return removed SenseVoice metadata tags for local diagnostics."""
+    return tuple(SENSEVOICE_TAG_PATTERN.findall(str(text or "")))
 
 
 class BaseASRAdapter:
@@ -64,12 +85,21 @@ class WhisperASRAdapter(BaseASRAdapter):
         return [ASRCandidate(text=text, confidence=confidence, source="whisper")]
 
     def _get_model(self):
-        key = (self.config.whisper_model, self.config.device, self.config.compute_type)
+        model_path = Path(self.config.whisper_model_path).expanduser() if self.config.whisper_model_path else None
+        if model_path and not model_path.exists():
+            raise LocalASRModelError(f"Local Whisper model path does not exist: {model_path}")
+        if not model_path and not self.config.whisper_allow_download:
+            raise LocalASRModelError(
+                "Local Whisper fallback is disabled because VOICE_WHISPER_ALLOW_DOWNLOAD=0 "
+                "and VOICE_WHISPER_MODEL_PATH is not configured."
+            )
+        model_ref = str(model_path) if model_path else self.config.whisper_model
+        key = (model_ref, self.config.device, self.config.compute_type)
         if key not in self._models:
             from faster_whisper import WhisperModel
 
             self._models[key] = WhisperModel(
-                self.config.whisper_model,
+                model_ref,
                 device=self.config.device,
                 compute_type=self.config.compute_type,
             )
@@ -110,8 +140,35 @@ class SenseVoiceASRAdapter(FunASRAdapter):
     def transcribe(self, audio_path, *, prompt: str = "", hotwords: list[str] | None = None) -> list[ASRCandidate]:
         model = self._get_model()
         result = model.generate(input=str(audio_path), hotword=" ".join(hotwords or []))
-        text = result[0].get("text", "") if result else ""
-        return [ASRCandidate(text=text, source="sensevoice")]
+        raw_text = result[0].get("text", "") if result else ""
+        text = clean_sensevoice_text(raw_text)
+        return [
+            ASRCandidate(
+                text=text,
+                source="sensevoice",
+                raw_text=raw_text,
+                metadata_tags_removed=get_sensevoice_metadata_tags(raw_text),
+            )
+        ]
+
+    def _get_model(self):
+        if self._model is None:
+            try:
+                from funasr import AutoModel
+            except ModuleNotFoundError as exc:
+                raise OptionalASRDependencyError(self.engine_name) from exc
+            model_path = Path(self.config.sensevoice_model_path).expanduser()
+            if model_path.exists():
+                self._model = AutoModel(model=str(model_path), disable_update=True)
+            elif self.config.sensevoice_allow_download:
+                self._model = AutoModel(model=self.config.asr_model)
+            else:
+                raise LocalASRModelError(
+                    f"Local SenseVoice model path does not exist: {model_path}. "
+                    "Set VOICE_SENSEVOICE_MODEL_PATH or explicitly allow downloads with "
+                    "VOICE_SENSEVOICE_ALLOW_DOWNLOAD=1."
+                )
+        return self._model
 
 
 class MockASRAdapter(BaseASRAdapter):

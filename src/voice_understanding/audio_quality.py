@@ -18,7 +18,7 @@ def inspect_audio_quality(audio_path, *, threshold: float = 0.35) -> AudioQualit
     if not path.exists() or path.stat().st_size == 0:
         return AudioQuality(0.0, False, "empty_or_missing_audio")
     if path.suffix.lower() not in {".wav", ".wave"}:
-        return AudioQuality(0.7, True, "decoder_check_deferred_to_local_asr")
+        return _inspect_non_wav_audio(path)
     try:
         with wave.open(str(path), "rb") as audio:
             frames = audio.getnframes()
@@ -36,3 +36,21 @@ def inspect_audio_quality(audio_path, *, threshold: float = 0.35) -> AudioQualit
     elif rate < 8000 or channels not in {1, 2}:
         score, reason = 0.3, "unsupported_audio_layout"
     return AudioQuality(score, score >= threshold, reason, round(duration, 3), rate, channels)
+
+
+def _inspect_non_wav_audio(path: Path) -> AudioQuality:
+    try:
+        import soundfile
+
+        info = soundfile.info(str(path))
+        duration = float(info.duration)
+        return AudioQuality(
+            0.7,
+            True,
+            "decoded_metadata_with_soundfile",
+            round(duration, 3),
+            int(info.samplerate),
+            int(info.channels),
+        )
+    except Exception:
+        return AudioQuality(0.7, True, "decoder_check_deferred_to_local_asr")
