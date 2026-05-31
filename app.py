@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -143,9 +144,9 @@ def _render_voice_conversation() -> None:
     with st.expander("Voice input details", expanded=False):
         st.caption(get_voice_input_mode_description())
         st.caption(
-            "AI parser: GLM enabled"
-            if is_glm_parser_available()
-            else "AI parser: Rule fallback"
+            "Legacy AI parser: GLM explicitly enabled"
+            if _voice_allow_cloud() and is_glm_parser_available()
+            else "AI parser: local rule path"
         )
         st.caption(f"Last parse source: {st.session_state.parser_source}")
         asr_result = st.session_state.last_asr_result or {}
@@ -158,6 +159,12 @@ def _render_voice_conversation() -> None:
             )
             if asr_result.get("raw_text") != asr_result.get("corrected_text"):
                 st.caption(f"ASR raw text: {asr_result.get('raw_text', '')}")
+            decision = asr_result.get("decision") or {}
+            st.caption(f"Voice decision: {decision.get('action', 'unknown')}")
+            st.caption(f"Trace ID: {asr_result.get('trace_id', '')}")
+            if _voice_debug_enabled() and asr_result.get("top_hypotheses"):
+                st.markdown("##### Local understanding hypotheses")
+                st.json(asr_result["top_hypotheses"])
     if st.session_state.last_normalized_command:
         st.text_area(
             "Normalized user input",
@@ -258,7 +265,7 @@ def _handle_command(command: str) -> None:
         _set_system_response("请先录音，或输入一条日历指令。")
         return
 
-    parsed = parse_user_command(normalized_command, tasks=load_tasks())
+    parsed = parse_user_command(normalized_command, tasks=load_tasks(), use_ai=_voice_allow_cloud())
     st.session_state.parser_source = parsed.get("source", "rule")
     st.session_state.last_normalized_command = parsed.get("normalized_text", normalized_command)
     if parsed.get("need_clarification"):
@@ -714,6 +721,14 @@ def _set_selected_date(value: str) -> None:
     st.session_state.selected_date = value
     st.session_state.calendar_year = selected.year
     st.session_state.calendar_month = selected.month
+
+
+def _voice_debug_enabled() -> bool:
+    return os.getenv("VOICE_DEBUG", "0").strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _voice_allow_cloud() -> bool:
+    return os.getenv("VOICE_ALLOW_CLOUD", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
 if __name__ == "__main__":

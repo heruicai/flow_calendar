@@ -24,6 +24,13 @@ class VoiceConfig:
     confirmation_threshold: float = 0.65
     max_context_terms: int = 80
     privacy_mode: str = "local"
+    allow_cloud: bool = False
+    enable_trace: bool = True
+    trace_dir: str = "outputs/voice_traces"
+    auto_execute_threshold: float = 0.88
+    confirm_margin_threshold: float = 0.12
+    reject_audio_quality_threshold: float = 0.35
+    save_raw_audio: bool = False
 
 
 def get_voice_config() -> VoiceConfig:
@@ -43,6 +50,13 @@ def get_voice_config() -> VoiceConfig:
         confirmation_threshold=_read_float("VOICE_CONFIRMATION_THRESHOLD", 0.65),
         max_context_terms=_read_int("VOICE_MAX_CONTEXT_TERMS", 80),
         privacy_mode=os.getenv("VOICE_PRIVACY_MODE", "local").strip().lower(),
+        allow_cloud=_read_bool("VOICE_ALLOW_CLOUD", False),
+        enable_trace=_read_bool("VOICE_ENABLE_TRACE", True),
+        trace_dir=os.getenv("VOICE_TRACE_DIR", "outputs/voice_traces").strip(),
+        auto_execute_threshold=_read_float("VOICE_AUTO_EXECUTE_THRESHOLD", 0.88),
+        confirm_margin_threshold=_read_float("VOICE_CONFIRM_MARGIN_THRESHOLD", 0.12),
+        reject_audio_quality_threshold=_read_float("VOICE_REJECT_AUDIO_QUALITY_THRESHOLD", 0.35),
+        save_raw_audio=_read_bool("VOICE_SAVE_RAW_AUDIO", False),
     )
 
 

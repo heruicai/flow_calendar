@@ -90,6 +90,7 @@ Microphone/Text Input
 
 Voice modules:
 
+- `src/voice_understanding/`: structured local hypotheses, semantic frames, risk decisions, and JSONL traces.
 - `src/asr_adapter.py`: lazy-loaded local ASR interface with Whisper, optional FunASR/SenseVoice, and mock adapters.
 - `src/voice_context_builder.py`: bounded dynamic vocabulary from local task titles and calendar-domain terms.
 - `src/asr_postprocessor.py`: OpenCC normalization plus context-supported similarity correction.
@@ -137,7 +138,18 @@ $env:VOICE_CORRECTION_THRESHOLD="0.85"
 $env:VOICE_CONFIRMATION_THRESHOLD="0.65"
 $env:VOICE_MAX_CONTEXT_TERMS="80"
 $env:VOICE_PRIVACY_MODE="local"
+$env:VOICE_ALLOW_CLOUD="0"
+$env:VOICE_ENABLE_TRACE="1"
+$env:VOICE_TRACE_DIR="outputs/voice_traces"
+$env:VOICE_AUTO_EXECUTE_THRESHOLD="0.88"
+$env:VOICE_CONFIRM_MARGIN_THRESHOLD="0.12"
+$env:VOICE_REJECT_AUDIO_QUALITY_THRESHOLD="0.35"
+$env:VOICE_SAVE_RAW_AUDIO="0"
 ```
+
+See [`docs/local_voice_understanding_engine.md`](docs/local_voice_understanding_engine.md)
+for architecture, traces, local SenseVoice/FunASR opt-in behavior, privacy, and
+test commands.
 
 `VOICE_ASR_ENGINE=funasr` or `sensevoice` enables the optional local adapter when its package and model are installed. If that optional package is absent, FlowCal falls back to the existing local Whisper path. Models remain lazy-loaded, so importing the application does not download or initialize a large model.
 

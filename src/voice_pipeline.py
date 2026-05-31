@@ -1,67 +1,49 @@
-"""Orchestrate local ASR, context bias, correction, and candidate reranking."""
+"""Compatibility facade for the productized local voice understanding engine."""
 
 from __future__ import annotations
 
-import re
+from dataclasses import asdict
 
-from src.asr_adapter import WhisperASRAdapter, create_asr_adapter
-from src.asr_reranker import rerank_asr_candidates
 from src.voice_config import get_voice_config
-from src.voice_context_builder import build_voice_context
+from src.voice_understanding.pipeline import understand_voice
 
 
 def transcribe_audio(audio_path, *, tasks: list[dict] | None = None, adapter=None, config=None) -> dict:
-    """Transcribe one local recording and return traceable correction metadata."""
+    """Transcribe locally and preserve the legacy response fields."""
     settings = config or get_voice_config()
-    context = build_voice_context(
-        tasks,
-        extra_terms=[term for term in re.split(r"[,，;；\s]+", settings.hotwords) if term],
-        max_terms=settings.max_context_terms,
-        initial_prompt=settings.initial_prompt,
+    understanding = understand_voice(
+        audio_path,
+        tasks=tasks,
+        config=settings,
+        adapter=adapter,
+        # Compatibility tests use mock paths. Real recordings are checked.
+        check_audio=adapter is None,
     )
-    recognizer = adapter or create_asr_adapter(settings)
-    try:
-        candidates = recognizer.transcribe(
-            audio_path,
-            prompt=context["prompt"] if settings.enable_context_bias else settings.initial_prompt,
-            hotwords=context["hotwords"] if settings.enable_context_bias else [],
-        )
-    except (ImportError, ModuleNotFoundError):
-        if isinstance(recognizer, WhisperASRAdapter):
-            raise
-        candidates = WhisperASRAdapter(settings).transcribe(
-            audio_path,
-            prompt=context["prompt"],
-            hotwords=context["hotwords"],
-        )
-    if not candidates:
+    best = understanding.best
+    if best is None:
         raise ValueError("No clear speech was recognized.")
-
-    known_titles = [str(task.get("title") or "") for task in (tasks or []) if isinstance(task, dict)]
-    ranked = rerank_asr_candidates(
-        candidates,
-        context_terms=context["terms"] if settings.enable_semantic_correction else [],
-        known_task_titles=known_titles if settings.enable_semantic_correction else [],
-        correction_threshold=settings.correction_threshold,
-        confirmation_threshold=settings.confirmation_threshold,
-    )
-    best = ranked[0]
-    processed = best["postprocess"]
-    parser_confidence = best["score"]
-    high_risk_change = processed["corrected_text"] != processed["normalized_text"]
-    should_auto_execute = (
-        processed["confidence"] >= settings.correction_threshold
-        and parser_confidence >= 0.75
-        and not high_risk_change
-    )
+    frame = best.semantic_frame
+    expansions = [asdict(item) for item in best.expansions]
+    alternatives = [
+        {"text": item.text, "score": item.scores.get("final", 0.0)}
+        for item in understanding.top_hypotheses[1:4]
+    ]
     return {
-        **processed,
-        "text": processed["corrected_text"],
-        "mode": best["candidate"].source,
-        "parser_confidence": parser_confidence,
-        "should_auto_execute": should_auto_execute,
-        "needs_confirmation": settings.enable_confirmation and (
-            processed["needs_confirmation"] or high_risk_change or not should_auto_execute
-        ),
-        "candidates": ranked,
+        "raw_text": best.source_text,
+        "normalized_text": best.source_text,
+        "corrected_text": best.text,
+        "text": best.text,
+        "mode": best.source,
+        "confidence": best.scores.get("final", 0.0),
+        "parser_confidence": frame.confidence if frame else 0.0,
+        "corrections": expansions,
+        "alternatives": alternatives,
+        "needs_confirmation": understanding.decision.action in {"confirm", "clarify"},
+        "should_auto_execute": understanding.decision.action == "execute",
+        "understanding": understanding.to_dict(),
+        "decision": asdict(understanding.decision),
+        "semantic_frame": asdict(frame) if frame else None,
+        "top_hypotheses": [asdict(item) for item in understanding.top_hypotheses[:5]],
+        "trace_id": understanding.trace_id,
+        "candidates": [asdict(item) for item in understanding.top_hypotheses],
     }

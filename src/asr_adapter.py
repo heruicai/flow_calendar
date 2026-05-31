@@ -85,6 +85,16 @@ class FunASRAdapter(BaseASRAdapter):
         return self._model
 
 
+class SenseVoiceASRAdapter(FunASRAdapter):
+    """Optional local SenseVoice adapter with an explicit opt-in engine name."""
+
+    def transcribe(self, audio_path, *, prompt: str = "", hotwords: list[str] | None = None) -> list[ASRCandidate]:
+        model = self._get_model()
+        result = model.generate(input=str(audio_path), hotword=" ".join(hotwords or []))
+        text = result[0].get("text", "") if result else ""
+        return [ASRCandidate(text=text, source="sensevoice")]
+
+
 class MockASRAdapter(BaseASRAdapter):
     """Deterministic adapter for pure-function tests."""
 
@@ -97,6 +107,10 @@ class MockASRAdapter(BaseASRAdapter):
 
 def create_asr_adapter(config: VoiceConfig) -> BaseASRAdapter:
     """Create the configured local adapter without loading a model."""
-    if config.asr_engine in {"funasr", "sensevoice"}:
+    if config.asr_engine == "mock":
+        return MockASRAdapter()
+    if config.asr_engine == "sensevoice":
+        return SenseVoiceASRAdapter(config)
+    if config.asr_engine == "funasr":
         return FunASRAdapter(config)
     return WhisperASRAdapter(config)
