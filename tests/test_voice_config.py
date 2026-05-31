@@ -15,3 +15,22 @@ def test_voice_config_reads_local_asr_environment(monkeypatch):
     assert config.hotwords == "kernelPCA,FlowCal"
     assert config.enable_semantic_correction is False
     assert config.correction_threshold == 0.9
+
+
+def test_voice_config_defaults_to_local_sensevoice_without_whisper_fallback(monkeypatch):
+    monkeypatch.delenv("VOICE_ASR_ENGINE", raising=False)
+    monkeypatch.delenv("VOICE_ASR_MODEL", raising=False)
+    monkeypatch.delenv("VOICE_WHISPER_MODEL", raising=False)
+    monkeypatch.delenv("FLOWCAL_WHISPER_MODEL", raising=False)
+    monkeypatch.delenv("VOICE_ENABLE_DUAL_ASR", raising=False)
+    monkeypatch.delenv("VOICE_ASR_FALLBACK_ENGINE", raising=False)
+    monkeypatch.delenv("VOICE_WHISPER_ALLOW_DOWNLOAD", raising=False)
+
+    config = get_voice_config()
+
+    assert config.asr_engine == "sensevoice"
+    assert config.asr_model == "iic/SenseVoiceSmall"
+    assert config.whisper_model == "large-v3-turbo"
+    assert config.enable_dual_asr is False
+    assert config.asr_fallback_engine == "none"
+    assert config.whisper_allow_download is False

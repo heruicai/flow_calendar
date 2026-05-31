@@ -1,0 +1,6 @@
+[server]
+# Streamlit's watcher introspects every loaded module. FunASR imports
+# transformers, whose lazy image modules may require optional torchvision.
+# Disabling the watcher avoids those irrelevant imports after SenseVoice loads.
+# Restart Streamlit manually after editing Python files.
+fileWatcherType = "none"

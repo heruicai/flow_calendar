@@ -48,7 +48,7 @@ FlowCal uses a push-to-talk voice conversation as the primary flow:
 5. Confirmed changes are written to the local task store and the final result is spoken aloud.
 6. Schedule queries return concrete task details immediately in text and speech without a confirmation round.
 
-`pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The first ASR run downloads the selected Whisper model if it is not already cached; after that, transcription runs locally. Text command input remains available as a fallback.
+`pyttsx3` generates local WAV voice replies. Audio recordings are not uploaded to an external speech service, and no API key is required. The default Chinese ASR path loads a locally prepared SenseVoiceSmall model. It does not download Whisper automatically. Text command input remains available as a fallback.
 
 ## 6. Calendar Visualization Design
 
@@ -90,6 +90,7 @@ Microphone/Text Input
 
 Voice modules:
 
+- `src/voice_understanding/`: structured local hypotheses, semantic frames, risk decisions, and JSONL traces.
 - `src/asr_adapter.py`: lazy-loaded local ASR interface with Whisper, optional FunASR/SenseVoice, and mock adapters.
 - `src/voice_context_builder.py`: bounded dynamic vocabulary from local task titles and calendar-domain terms.
 - `src/asr_postprocessor.py`: OpenCC normalization plus context-supported similarity correction.
@@ -116,15 +117,29 @@ streamlit run app.py --server.port 8501
 
 Do not install project dependencies into the system Python environment.
 
-Open the local URL shown by Streamlit and allow microphone access in the browser. For local development, browsers generally permit microphone access on `localhost`. The default local ASR model is `base`; set `FLOWCAL_WHISPER_MODEL=small` before launching Streamlit when a larger, more accurate local model is preferred.
+Open the local URL shown by Streamlit and allow microphone access in the browser. For local development, browsers generally permit microphone access on `localhost`. The default Chinese ASR path uses the locally prepared SenseVoiceSmall directory.
+
+The repository includes `.streamlit/config.toml` with file watching disabled.
+FunASR imports `transformers`, and Streamlit's default watcher can
+otherwise inspect unrelated optional image modules and print noisy
+`ModuleNotFoundError: No module named 'torchvision'` tracebacks. `torchvision`
+is not required for SenseVoice speech recognition. Restart Streamlit manually
+after editing Python files.
 
 ### Local voice pipeline configuration
 
 The default voice path is local and free: it does not upload audio or call a paid speech API. Settings are optional environment variables:
 
 ```powershell
-$env:VOICE_ASR_ENGINE="whisper"
-$env:VOICE_ASR_MODEL="base"
+$env:VOICE_ASR_ENGINE="sensevoice"
+$env:VOICE_ASR_MODEL="iic/SenseVoiceSmall"
+$env:VOICE_SENSEVOICE_MODEL_PATH="$HOME\.cache\modelscope\hub\models\iic\SenseVoiceSmall"
+$env:VOICE_SENSEVOICE_ALLOW_DOWNLOAD="0"
+$env:VOICE_ENABLE_DUAL_ASR="0"
+$env:VOICE_ASR_FALLBACK_ENGINE="none"
+$env:VOICE_WHISPER_MODEL="large-v3-turbo"
+$env:VOICE_WHISPER_MODEL_PATH=""
+$env:VOICE_WHISPER_ALLOW_DOWNLOAD="0"
 $env:VOICE_ASR_DEVICE="cpu"
 $env:VOICE_ASR_COMPUTE_TYPE="int8"
 $env:VOICE_ASR_LANGUAGE="zh"
@@ -137,9 +152,41 @@ $env:VOICE_CORRECTION_THRESHOLD="0.85"
 $env:VOICE_CONFIRMATION_THRESHOLD="0.65"
 $env:VOICE_MAX_CONTEXT_TERMS="80"
 $env:VOICE_PRIVACY_MODE="local"
+$env:VOICE_ALLOW_CLOUD="0"
+$env:VOICE_ENABLE_TRACE="1"
+$env:VOICE_TRACE_DIR="outputs/voice_traces"
+$env:VOICE_AUTO_EXECUTE_THRESHOLD="0.88"
+$env:VOICE_CONFIRM_MARGIN_THRESHOLD="0.12"
+$env:VOICE_REJECT_AUDIO_QUALITY_THRESHOLD="0.35"
+$env:VOICE_SAVE_RAW_AUDIO="0"
+$env:VOICE_ENABLE_ASR_DIAGNOSTICS="1"
 ```
 
-`VOICE_ASR_ENGINE=funasr` or `sensevoice` enables the optional local adapter when its package and model are installed. If that optional package is absent, FlowCal falls back to the existing local Whisper path. Models remain lazy-loaded, so importing the application does not download or initialize a large model.
+See [`docs/local_voice_understanding_engine.md`](docs/local_voice_understanding_engine.md)
+for architecture, traces, local SenseVoice/FunASR opt-in behavior, privacy, and
+test commands.
+
+The Chinese voice path prefers the local SenseVoiceSmall directory. Install the
+optional runtime with `pip install torch torchaudio funasr modelscope`. If the
+configured model directory is absent, FlowCal shows a preparation hint and does
+not download weights by default. Models remain lazy-loaded, so importing the
+application and running tests do not initialize weights.
+
+Whisper `large-v3-turbo` is retained as an explicit local fallback only. It is
+not loaded or downloaded by default. To enable it, set
+`VOICE_ENABLE_DUAL_ASR=1`, `VOICE_ASR_FALLBACK_ENGINE=whisper`, and either
+provide `VOICE_WHISPER_MODEL_PATH` or explicitly set
+`VOICE_WHISPER_ALLOW_DOWNLOAD=1`.
+
+Each recognition prints a `[flowcal-asr]` JSON diagnostic line with engine,
+model, language, beam size, VAD, prompt injection, audio duration, raw ASR text,
+and fallback text. Add private local WAV regression cases under
+`examples/voice_samples/` and run `python scripts/voice_samples_regression.py`
+to validate the manifest without loading models. Use `--run-local-asr` only
+after preparing local model files.
+
+SenseVoice can read audio through `torchaudio` when ffmpeg is absent. Installing
+ffmpeg is still recommended for broader audio-format compatibility.
 
 The old fixed typo map remains only as a compatibility fallback for a few recurring ASR mistakes. It is no longer the primary correction strategy. The postprocessor now builds vocabulary from local tasks, converts Traditional Chinese to Simplified Chinese, normalizes full-width text, compares contextual candidates, reranks ASR hypotheses, and flags uncertain corrections for confirmation. False corrections can still occur for short ambiguous phrases, unusual names not present in local context, and noisy recordings.
 
