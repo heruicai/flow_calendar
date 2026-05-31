@@ -9,6 +9,7 @@ from app import (
     _cancel_task_editing,
     _render_page_styles,
     _render_task_actions,
+    _should_autoplay_voice_reply,
     _start_task_editing,
     _task_action_specs,
     _task_editor_specs,
@@ -228,6 +229,21 @@ def test_confirmation_step_can_render_same_voice_reply_in_two_locations(tmp_path
     app.run(timeout=20)
 
     assert len(app.exception) == 0
+
+
+def test_only_confirmation_voice_reply_autoplays_while_awaiting_confirmation(monkeypatch):
+    state = SimpleNamespace(dialog_state="awaiting_confirmation")
+    monkeypatch.setattr(app_module.st, "session_state", state)
+
+    assert _should_autoplay_voice_reply("confirmation_prompt") is True
+    assert _should_autoplay_voice_reply("final_response") is False
+
+
+def test_final_voice_reply_autoplays_after_confirmation(monkeypatch):
+    state = SimpleNamespace(dialog_state="completed")
+    monkeypatch.setattr(app_module.st, "session_state", state)
+
+    assert _should_autoplay_voice_reply("final_response") is True
 
 
 def test_tts_failure_keeps_text_reply_visible():

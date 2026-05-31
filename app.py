@@ -384,16 +384,22 @@ def _render_voice_reply(render_location: str) -> None:
 
     audio_path = voice_reply.get("audio_path")
     if voice_reply.get("success") and audio_path and Path(audio_path).exists():
-        # Streamlit 1.58 st.audio has no key parameter. A stable per-location
-        # width keeps simultaneous confirmation and final players distinct.
+        # The same reply can appear in the confirmation panel and the persistent
+        # assistant panel. Only the active confirmation panel should autoplay.
         audio_width = "stretch" if render_location == "confirmation_prompt" else 360
         st.audio(
             audio_path,
             format="audio/wav",
-            autoplay=True,
+            autoplay=_should_autoplay_voice_reply(render_location),
             width=audio_width,
         )
     st.caption(voice_reply.get("message") or "")
+
+
+def _should_autoplay_voice_reply(render_location: str) -> bool:
+    if render_location == "confirmation_prompt":
+        return True
+    return st.session_state.dialog_state != "awaiting_confirmation"
 
 
 def _reset_voice_round() -> None:
