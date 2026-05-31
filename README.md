@@ -119,11 +119,12 @@ Do not install project dependencies into the system Python environment.
 
 Open the local URL shown by Streamlit and allow microphone access in the browser. For local development, browsers generally permit microphone access on `localhost`. The default Chinese ASR path uses the locally prepared SenseVoiceSmall directory.
 
-The repository includes `.streamlit/config.toml` with polling-based file
-watching. FunASR imports `transformers`, and Streamlit's default watcher can
+The repository includes `.streamlit/config.toml` with file watching disabled.
+FunASR imports `transformers`, and Streamlit's default watcher can
 otherwise inspect unrelated optional image modules and print noisy
 `ModuleNotFoundError: No module named 'torchvision'` tracebacks. `torchvision`
-is not required for SenseVoice speech recognition.
+is not required for SenseVoice speech recognition. Restart Streamlit manually
+after editing Python files.
 
 ### Local voice pipeline configuration
 
