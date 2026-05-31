@@ -1,0 +1,5 @@
+[server]
+# Streamlit's watcher introspects every loaded module. FunASR imports
+# transformers, whose lazy image modules may require optional torchvision.
+# Polling avoids those irrelevant imports while keeping local auto-reruns.
+fileWatcherType = "poll"
